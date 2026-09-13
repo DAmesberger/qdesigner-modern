@@ -20,6 +20,21 @@ const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 // Marks the single 403-recovery retry so it can never itself be retried.
 const CSRF_RETRY_MARKER = 'X-CSRF-Retry';
 
+// The generated client otherwise throws only the response body, losing headers
+// and even status when a proxy returns plain text. Keep transport metadata for
+// callSdk's error conversion and the offline sync retry policy.
+generatedClient.interceptors.error.use((error, response) => {
+  if (!response) return error;
+  const payload = error !== null && typeof error === 'object'
+    ? error
+    : { message: typeof error === 'string' ? error : 'Request failed' };
+  return {
+    ...payload,
+    httpStatus: response.status,
+    retryAfter: response.headers.get('Retry-After'),
+  };
+});
+
 function isFormDataBody(value: unknown): value is FormData {
   return typeof FormData !== 'undefined' && value instanceof FormData;
 }

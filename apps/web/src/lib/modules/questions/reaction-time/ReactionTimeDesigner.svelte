@@ -658,7 +658,7 @@
       </div>
 
       <!-- Key presets -->
-      <div class="flex gap-2 mb-2">
+      <div class="flex gap-2 mb-2" data-testid="reaction-response-key-preset">
         <Select bind:value={selectedKeyPreset} class="text-sm">
           <option value="">Select preset...</option>
           {#each keyPresets as preset}

@@ -326,6 +326,8 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         // returned state before building the router.
         session_create_rate_max: 10_000,
         session_create_rate_window_secs: 60,
+        session_sync_rate_max: 120,
+        session_sync_rate_window_secs: 60,
         questionnaire_create_rate_max: 10_000,
         questionnaire_create_rate_window_secs: 60,
         session_media_rate_max: 10_000,
@@ -349,6 +351,7 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         verify_attempt_limiter: RateLimiter::new(10_000, 60, None),
         api_key_rate_limiter: RateLimiter::new(10_000, 60, None),
         session_create_limiter: RateLimiter::new(10_000, 60, None),
+        session_sync_limiter: RateLimiter::new(120, 60, None),
         questionnaire_create_limiter: RateLimiter::new(10_000, 60, None),
         session_media_limiter: RateLimiter::new(10_000, 60, None),
         client_error_limiter: RateLimiter::new(10_000, 60, None),

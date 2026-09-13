@@ -268,7 +268,7 @@
   </div>
 
   <!-- Save indicator dot -->
-  <div class="relative group" data-testid="designer-save-indicator">
+  <div class="relative group" data-testid="designer-save-indicator" data-save-status={saveStatus}>
     <div
       class="w-2 h-2 rounded-full transition-colors duration-200 {saveStatus === 'saved'
         ? 'bg-success'

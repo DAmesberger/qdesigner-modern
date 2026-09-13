@@ -11,6 +11,7 @@ use crate::middleware::fillout_rls_context::set_fillout_rls_context;
 use crate::middleware::rate_limit::{
     client_error_rate_limit_middleware, rate_limit_middleware,
     session_create_rate_limit_middleware, session_media_rate_limit_middleware,
+    session_sync_rate_limit_middleware,
 };
 use crate::middleware::rls_context::set_rls_context;
 use crate::middleware::series_rls_context::set_series_rls_context;
@@ -349,7 +350,7 @@ pub fn router(state: AppState) -> Router {
             post(sessions::sync_session)
                 .route_layer(axum_mw::from_fn_with_state(
                     state.clone(),
-                    rate_limit_middleware,
+                    session_sync_rate_limit_middleware,
                 ))
                 // Offline-first fillout exists to accumulate LARGE batches: the
                 // client (`FilloutUploadSync`) chunks at 200 rows, and a

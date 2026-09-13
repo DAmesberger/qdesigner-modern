@@ -489,3 +489,78 @@ async fn session_media_upload_is_rate_limited_per_ip() {
         "the anonymous upload route must be rate-limited"
     );
 }
+
+/// #51: a lab's sync traffic must not spend the auth-tuned shared IP budget.
+#[tokio::test]
+async fn sync_sessions_do_not_share_the_general_ip_budget() {
+    let Some(mut state) = common::build_test_state().await else {
+        return;
+    };
+    let setup = common::test_app(state.clone());
+    let qid = published_questionnaire(&setup).await;
+    let mut sessions = Vec::new();
+    for _ in 0..2 {
+        let (status, body) =
+            common::send(&setup, create_session_req(qid, "203.0.113.10", None)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body:?}");
+        sessions.push(body["id"].as_str().unwrap().to_owned());
+    }
+    state.rate_limiter = RateLimiter::new(2, 60, None);
+    let app = common::test_app(state);
+    for pass in 0..3 {
+        for id in &sessions {
+            let mut req = common::json_req(
+                "POST",
+                &format!("/api/sessions/{id}/sync"),
+                None,
+                Some(&serde_json::json!({ "responses": [], "events": [], "variables": [] })),
+            );
+            req.extensions_mut().insert(ConnectInfo(
+                "203.0.113.10:54321".parse::<SocketAddr>().unwrap(),
+            ));
+            let (status, body) = common::send(&app, req).await;
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "sync {pass}, session {id}: {body:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn sync_is_bounded_per_session_and_returns_retry_after() {
+    let Some(mut state) = common::build_test_state().await else {
+        return;
+    };
+    let setup = common::test_app(state.clone());
+    let qid = published_questionnaire(&setup).await;
+    let mut sessions = Vec::new();
+    for _ in 0..2 {
+        let (status, body) =
+            common::send(&setup, create_session_req(qid, "203.0.113.10", None)).await;
+        assert_eq!(status, StatusCode::CREATED, "{body:?}");
+        sessions.push(body["id"].as_str().unwrap().to_owned());
+    }
+    state.session_sync_limiter = RateLimiter::new(2, 60, None);
+    let app = common::test_app(state);
+    let payload = serde_json::json!({ "responses": [], "events": [], "variables": [] });
+    for (id, expected) in [
+        (&sessions[0], StatusCode::OK),
+        (&sessions[0], StatusCode::OK),
+        (&sessions[0], StatusCode::TOO_MANY_REQUESTS),
+        (&sessions[1], StatusCode::OK),
+    ] {
+        let req = common::json_req(
+            "POST",
+            &format!("/api/sessions/{id}/sync"),
+            None,
+            Some(&payload),
+        );
+        let (status, headers, _) = common::send_raw(&app, req).await;
+        assert_eq!(status, expected);
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            assert_eq!(headers.get("Retry-After").unwrap(), "60");
+        }
+    }
+}

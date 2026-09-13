@@ -71,10 +71,8 @@ function svelteKitHeader(nonce = 'nonce-r4nd0m'): string {
 
 describe('cspHeaderFor', () => {
   describe('base policy shape', () => {
-    it('permits unsafe-eval but never unsafe-inline in script-src', () => {
-      // unsafe-eval is the documented ScriptExecutor concession; unsafe-inline is
-      // the token that would make the policy meaningless. One in, the other out.
-      expect(APP_CSP_DIRECTIVES['script-src']).toContain('unsafe-eval');
+    it('permits neither dynamic JavaScript compilation nor inline scripts', () => {
+      expect(APP_CSP_DIRECTIVES['script-src']).not.toContain('unsafe-eval');
       expect(APP_CSP_DIRECTIVES['script-src']).not.toContain('unsafe-inline');
     });
 
@@ -109,7 +107,7 @@ describe('cspHeaderFor', () => {
     it('preserves the SvelteKit nonce so hydration is not blocked', () => {
       const out = directivesOf(cspHeaderFor(svelteKitHeader('nonce-KEEPME'), true, false));
       expect(out['script-src']).toContain("'nonce-KEEPME'");
-      expect(out['script-src']).toContain("'unsafe-eval'");
+      expect(out['script-src']).not.toContain("'unsafe-eval'");
       expect(out['script-src']).not.toContain("'unsafe-inline'");
     });
 

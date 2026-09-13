@@ -311,6 +311,7 @@
               <label for={`responseset-option-${i}-label`}>Label</label>
               <input
                 id={`responseset-option-${i}-label`}
+                data-testid={`responseset-option-${i}-label`}
                 type="text"
                 class="input"
                 value={option.label ?? ''}
@@ -322,6 +323,7 @@
               <label for={`responseset-option-${i}-id`}>Option id</label>
               <input
                 id={`responseset-option-${i}-id`}
+                data-testid={`responseset-option-${i}-id`}
                 type="text"
                 class="input"
                 class:invalid={isDuplicateId(option.id) || !option.id}
@@ -369,6 +371,7 @@
           <label class="mt-2 flex items-center gap-2 text-sm cursor-pointer">
             <input
               id={`responseset-option-${i}-correct`}
+                data-testid={`responseset-option-${i}-correct`}
               type="checkbox"
               class="w-4 h-4 cursor-pointer"
               checked={isCorrect(option.id)}
@@ -394,6 +397,7 @@
                     type="button"
                     class="capture-btn"
                     id={`responseset-option-${i}-binding-${j}-key`}
+                    data-testid={`responseset-option-${i}-binding-${j}-key`}
                     onclick={() => startListening(i, j)}
                   >
                     {#if listening && listening.option === i && listening.binding === j}

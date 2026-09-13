@@ -5,6 +5,7 @@ import { OfflineResponsePersistence, type StoredFilloutResponse } from './Offlin
 import { OfflineTrialPersistence } from './OfflineTrialPersistence';
 import { OfflineBinaryPersistence } from './OfflineBinaryPersistence';
 import { SyncLedger } from './integrity/SyncLedger';
+import { ApiError } from '$lib/services/api/errors';
 import { FilloutContentCache } from './FilloutContentCache';
 import { db, filloutDefinitionKey, type FilloutSession, type FilloutResponse, type FilloutEvent, type FilloutVariable, type FilloutTrial } from '$lib/services/db/indexeddb';
 import type { SyncPayload, SyncTrialItem } from '$lib/api/generated/types.gen';
@@ -234,6 +235,11 @@ export class FilloutUploadSync {
 			const drainedDefinitionKeys = new Set<string>();
 
 			for (const session of sessions) {
+				// Eager saves and reconnects must also respect the transport backoff.
+				if ((session.syncRetryAt ?? 0) > Date.now()) {
+					needsRetry = true;
+					continue;
+				}
 				try {
 					// E-OFF-5: reconcile locally-acked-but-server-missing rows BEFORE
 					// draining, so an over-marked record is re-queued and shipped in this
@@ -246,6 +252,7 @@ export class FilloutUploadSync {
 						console.warn(`[FilloutUploadSync] reconcile skipped for ${session.id}:`, reconcileErr);
 					}
 					const sessionResult = await this.syncSession(session);
+					await db.filloutSessions.update(session.id, { syncRetryAt: 0 });
 					result.sessionsSynced++;
 					result.responsesSynced += sessionResult.responsesSynced;
 					result.eventsSynced += sessionResult.eventsSynced;
@@ -276,8 +283,19 @@ export class FilloutUploadSync {
 					// online/periodic tick. Flag it; one scheduleRetry fires below so
 					// concurrent failures don't over-double the backoff.
 					needsRetry = true;
-					// E-OFF-5: a session that errored out (e.g. repeated 500s) burns a sync
-					// attempt against every record it was trying to ship, so a permanently-
+					if (err instanceof ApiError && (
+						err.status === null || err.status === 408 || err.status === 425 ||
+						err.status === 429 || err.status >= 500
+					)) {
+						// An outage says nothing about the validity of a saved answer.
+						// Preserve its rejection budget and keep automatic delivery alive.
+						await this.deferSessionSync(session.id, Date.now() + Math.max(
+							this.retryDelay, err.retryAfterMs ?? 0
+						));
+						continue;
+					}
+					// Permanent/non-transport errors burn a sync attempt against every
+					// record being shipped, so a permanently-
 					// failing row eventually reaches dead-letter (and a visible alert)
 					// instead of retrying forever with no escalation. Best-effort.
 					try {
@@ -371,6 +389,18 @@ export class FilloutUploadSync {
 			createdAt: 0,
 			synced: 0,
 		};
+	}
+
+	private async deferSessionSync(id: string, syncRetryAt: number): Promise<void> {
+		// Persistence and the page each own an engine. The existing cross-tab
+		// drain lock serializes them; a durable deadline keeps the next engine
+		// from bypassing a Retry-After received by its predecessor.
+		await db.transaction('rw', db.filloutSessions, async () => {
+			if (!(await db.filloutSessions.update(id, { syncRetryAt }))) {
+				// Legacy online sessions may have queued rows but no local session.
+				await db.filloutSessions.add({ ...this.stubSession(id), syncRetryAt });
+			}
+		});
 	}
 
 	/**
@@ -851,7 +881,8 @@ export class FilloutUploadSync {
 	}
 
 	private scheduleRetry(): void {
-		if (this.retryTimeout) clearTimeout(this.retryTimeout);
+		// New answers must not continuously push an already scheduled retry back.
+		if (this.retryTimeout) return;
 
 		// Jittered backoff (E-OFF-4): add up to +30% so simultaneously-retrying tabs
 		// don't re-converge on the same instant.

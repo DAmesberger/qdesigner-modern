@@ -5,7 +5,6 @@
   import { moduleRegistry } from '$lib/modules/registry';
   import { type ComponentType } from 'svelte';
   import StyleEditor from './StyleEditor.svelte';
-  import ScriptEditor from './ScriptEditor.svelte';
   import { getItemSettings } from '$lib/utils/itemSettings';
   import { Library, MousePointerClick } from 'lucide-svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
@@ -17,7 +16,7 @@
   import VariableProperties from './properties/VariableProperties.svelte';
   import type { DesignerQuestionUpdate } from './properties/types';
 
-  let activeTab = $state<'properties' | 'style' | 'script'>('properties');
+  let activeTab = $state<'properties' | 'style'>('properties');
   // Theme is persisted on the questionnaire via the designer store (autosaved).
   let theme = $derived(designerStore.theme);
 
@@ -33,7 +32,6 @@
   // Get organizationId and userId from store
   let organizationId = $derived(designerStore.questionnaire.organizationId || '');
   let userId = $derived(designerStore.userId || '');
-  let showScriptTab = $derived(!!questionItem);
   let isChoiceQuestion = $derived(
     !!questionItem &&
       (questionItem.type === 'multiple-choice' || questionItem.type === 'single-choice')
@@ -122,6 +120,7 @@
   let loadingComponent = $state(false);
   let moduleCategory = $state<string | null>(null);
   let lastLoadedType = $state<string | null>(null);
+  let loadedType = $state<string | null>(null);
 
   // Only reload component if the type changes
   $effect(() => {
@@ -132,6 +131,7 @@
       }
     } else {
       lastLoadedType = null;
+      loadedType = null;
       designerComponent = null;
       moduleCategory = null;
     }
@@ -142,35 +142,28 @@
     try {
       const metadata = moduleRegistry.get(type);
       if (metadata) {
+        const component = await moduleRegistry.loadComponent(type, 'designer');
+        if (lastLoadedType !== type) return;
         moduleCategory = metadata.category;
-        designerComponent = await moduleRegistry.loadComponent(type, 'designer');
+        designerComponent = component;
+        loadedType = type;
       } else {
         designerComponent = null;
         moduleCategory = null;
       }
     } catch (error) {
+      if (lastLoadedType !== type) return;
       console.error('Failed to load designer component:', error);
       designerComponent = null;
       moduleCategory = null;
     } finally {
-      loadingComponent = false;
+      if (lastLoadedType === type) loadingComponent = false;
     }
   }
 
   function handleThemeUpdate(event: { path: string[]; value: any }) {
     // Persist the theme edit through the designer store so it autosaves.
     designerStore.updateTheme(event.path, event.value);
-  }
-
-  function handleScriptUpdate(script: string) {
-    if (questionItem) {
-      designerStore.updateQuestion(questionItem.id, {
-        settings: {
-          ...getItemSettings(questionItem),
-          script,
-        },
-      });
-    }
   }
 </script>
 
@@ -199,19 +192,6 @@
     >
       Style
     </button>
-    {#if showScriptTab}
-      <button
-        class="flex-1 px-4 py-2 text-sm font-medium transition-colors"
-        class:bg-card={activeTab === 'script'}
-        class:text-foreground={activeTab === 'script'}
-        class:text-muted-foreground={activeTab !== 'script'}
-        class:border-b-2={activeTab === 'script'}
-        class:border-primary={activeTab === 'script'}
-        onclick={() => (activeTab = 'script')}
-      >
-        Script
-      </button>
-    {/if}
   </div>
 
   <!-- Tab Content -->
@@ -268,14 +248,14 @@
             </div>
 
             <!-- Type-specific Properties -->
-            {#if loadingComponent}
+            {#if loadingComponent || lastLoadedType !== questionItem.type}
               <div class="border-t pt-4">
                 <div class="flex items-center justify-center p-4">
                   <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                   <span class="ml-2 text-sm text-muted-foreground">Loading properties...</span>
                 </div>
               </div>
-            {:else if designerComponent}
+            {:else if designerComponent && loadedType === questionItem.type}
               {@const DesignerComponent = designerComponent}
               <div class="border-t pt-4">
                 {#key questionItem.id}
@@ -491,35 +471,6 @@
           : 'global'}
         onupdate={handleThemeUpdate}
       />
-    {:else if activeTab === 'script' && questionItem}
-      <div class="p-4 space-y-4">
-        <div class="flex items-center justify-between">
-          <h4 class="text-sm font-medium text-foreground">Question Script</h4>
-          <span class="text-xs px-2 py-0.5 rounded-full {questionItem.settings?.script ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}">
-            {questionItem.settings?.script ? 'Has script' : 'No script'}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          class="w-full flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors"
-          onclick={() => {
-            const event = new CustomEvent('open-script-editor', { detail: { question: questionItem } });
-            window.dispatchEvent(event);
-          }}
-          data-testid="open-script-editor"
-        >
-          Open Script Editor
-        </button>
-
-        {#if typeof questionItem.settings?.script === 'string' && questionItem.settings.script}
-          {@const script = questionItem.settings.script}
-          <div>
-            <p class="text-xs text-muted-foreground mb-1.5">Preview</p>
-            <pre class="text-xs font-mono bg-muted rounded-md p-3 overflow-hidden max-h-32 text-muted-foreground leading-relaxed">{script.split('\n').slice(0, 8).join('\n')}{script.split('\n').length > 8 ? '\n...' : ''}</pre>
-          </div>
-        {/if}
-      </div>
     {/if}
   </div>
 </div>

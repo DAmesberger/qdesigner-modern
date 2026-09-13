@@ -12,10 +12,10 @@ export default defineConfig({
       'src/**/*.{test,spec}.{js,ts}',
       'tests/unit/**/*.{test,spec}.{js,ts}',
       'tests/integration/**/*.{test,spec}.{js,ts}',
-      '../../packages/**/src/**/*.{test,spec}.{js,ts}'
+      '../../packages/*/src/**/*.{test,spec}.{js,ts}'
     ],
     exclude: [
-      'node_modules',
+      '**/node_modules/**',
       'dist',
       '.svelte-kit',
       'e2e/**/*',
@@ -53,7 +53,7 @@ export default defineConfig({
       $app: path.resolve('./src/app'),
       // Monaco's package entry does not resolve under vitest's vite transform and
       // the editor is never mounted in jsdom component tests; stub it so designer
-      // component graphs (ScriptEditor / ScriptEditorOverlay) stay resolvable.
+      // component graphs using the formula editor stay resolvable.
       'monaco-editor': path.resolve('./tests/setup/monaco-editor-stub.ts'),
       '@qdesigner/contracts/generated': path.resolve('../../packages/contracts/src/generated'),
       '@qdesigner/contracts': path.resolve('../../packages/contracts/src/index.ts'),

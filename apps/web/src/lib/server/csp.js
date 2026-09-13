@@ -28,25 +28,6 @@
  * opt in with CORP, and ADR 0026 requires reaction media to be offline-complete —
  * a remote stimulus URL can be neither.
  *
- * ## `'unsafe-eval'` — a deliberate, documented concession
- *
- * `runtime/core/ScriptExecutor.ts:261` evaluates researcher-authored questionnaire
- * hooks with `new Function(...)` ON THE MAIN THREAD, and `QuestionnaireRuntime`
- * consumes the results synchronously (onMount/onValidate/onResponse/onNavigate), so
- * they cannot move into the existing `ScriptWorker` without breaking that contract.
- * `new Function` requires `'unsafe-eval'`. Dropping the token does not harden the
- * app — it deletes the scripting feature.
- *
- * What that concession does and does not cost is worth being precise about.
- * `'unsafe-eval'` only helps an attacker who ALREADY has script execution. It does
- * not re-open the injection vectors this policy is here to close: with a nonce and
- * no `'unsafe-inline'`, an injected `<script>` tag or an `onerror=` handler (e.g.
- * through a DOMPurify bypass in the `{@html}` sinks that render researcher markdown)
- * still does not run. The researcher, meanwhile, is a *trusted author* who can
- * already execute arbitrary JS by design — CSP was never the boundary there.
- *
- * The real remediation is to move the hooks behind the async worker API; until then
- * this token is the honest price of the feature, not an oversight.
  */
 
 /**
@@ -68,10 +49,9 @@ export const DEV_MEDIA_ORIGIN = 'http://localhost:19003';
 export const APP_CSP_DIRECTIVES = {
   'default-src': ['self'],
 
-  // 'unsafe-eval': ScriptExecutor's main-thread `new Function` (see above).
   // NO 'unsafe-inline' — SvelteKit nonces its own inline scripts, and `app.html`
   // takes the nonce via the `%sveltekit.nonce%` placeholder.
-  'script-src': ['self', 'unsafe-eval'],
+  'script-src': ['self'],
 
   // Stylesheets are emitted as same-origin <link>s in a production build; SvelteKit
   // nonces any <style> it inlines. In dev, Vite injects component CSS as <style>
@@ -96,9 +76,6 @@ export const APP_CSP_DIRECTIVES = {
   // fetches of locally-created object URLs.
   'connect-src': ['self', 'blob:'],
 
-  // Service worker (`/sw.js`). The blob-URL ScriptWorker in @qdesigner/scripting-engine
-  // has no live consumer (nothing constructs ScriptEngine), so blob: is NOT granted —
-  // wiring that worker up will need this line changed, deliberately.
   'worker-src': ['self'],
 
   // ReportGenerator's print-to-PDF fallback writes into an about:blank iframe.

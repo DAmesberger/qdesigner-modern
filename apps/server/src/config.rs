@@ -144,6 +144,11 @@ pub struct Config {
     pub session_create_rate_max: u64,
     pub session_create_rate_window_secs: i64,
 
+    /// Per-session sync budget; default 120 requests / 60 seconds. A lab's
+    /// participants do not share one auth/IP bucket for answer delivery.
+    pub session_sync_rate_max: u64,
+    pub session_sync_rate_window_secs: i64,
+
     /// Per-QUESTIONNAIRE budget on session creation (`qcreate:{qid}`). A
     /// distributed flood spread over many IPs would slip past the per-IP budget
     /// while still inflating that study's `arm_counts` / participant numbering,
@@ -339,6 +344,10 @@ impl Config {
             trusted_proxy_hops: env_parse::<usize>("TRUSTED_PROXY_HOPS").filter(|&n| n > 0),
             session_create_rate_max: env_parse("SESSION_CREATE_RATE_LIMIT_MAX").unwrap_or(60),
             session_create_rate_window_secs: env_parse("SESSION_CREATE_RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or(60),
+            session_sync_rate_max: env_parse("SESSION_SYNC_RATE_LIMIT_MAX").unwrap_or(120),
+            session_sync_rate_window_secs: env_parse("SESSION_SYNC_RATE_LIMIT_WINDOW_SECS")
+                .filter(|&seconds| seconds > 0)
                 .unwrap_or(60),
             questionnaire_create_rate_max: env_parse("QUESTIONNAIRE_CREATE_RATE_LIMIT_MAX")
                 .unwrap_or(600),

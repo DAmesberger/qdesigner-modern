@@ -25,8 +25,6 @@
      * input/change handler wired to this commits + emits the update.
      */
     onTrialCommit: () => void;
-    hasScript: boolean;
-    onOpenScript: () => void;
     /** Open the media picker in "assign to selected trial" mode. */
     onChooseMedia: () => void;
     /** Switch the left rail to the Assets tab. */
@@ -41,8 +39,6 @@
     updateSelectedBlock,
     updateSelectedTrial,
     onTrialCommit,
-    hasScript,
-    onOpenScript,
     onChooseMedia,
     onOpenAssetBin,
   }: Props = $props();
@@ -193,19 +189,7 @@
         />
         Show stage grid
       </label>
-      <div class="rounded-2xl border border-border/70 bg-muted/20 p-3">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="text-sm font-semibold text-foreground">Experiment Script</p>
-            <p class="text-xs text-muted-foreground">
-              Attach advanced runtime hooks for this experiment.
-            </p>
-          </div>
-          <Button variant="secondary" size="sm" onclick={onOpenScript}>
-            {hasScript ? 'Edit Script' : 'Add Script'}
-          </Button>
-        </div>
-      </div>
+
     </div>
   </section>
 

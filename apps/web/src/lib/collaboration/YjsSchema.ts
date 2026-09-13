@@ -10,6 +10,7 @@
  */
 
 import * as Y from 'yjs';
+import { assertNoJavaScriptHooks } from '@qdesigner/questionnaire-core';
 import type {
   Block,
   FlowControl,
@@ -24,6 +25,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export function questionnaireToYDoc(questionnaire: Questionnaire, doc?: Y.Doc): Y.Doc {
+  assertNoJavaScriptHooks(questionnaire);
   const ydoc = doc ?? new Y.Doc();
 
   ydoc.transact(() => {
@@ -88,6 +90,13 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
   const variablesArr = doc.getArray<Y.Map<unknown>>('variables');
   const flowArr = doc.getArray<Y.Map<unknown>>('flow');
 
+  // Validate the stored shape before decoding can discard obsolete executable fields.
+  assertNoJavaScriptHooks({
+    ...meta.toJSON(),
+    pages: pagesArr.toJSON(),
+    questions: questionsMap.toJSON(),
+  });
+
   const questions: Question[] = [];
   questionsMap.forEach((yQuestion) => {
     questions.push(yMapToQuestion(yQuestion));
@@ -96,7 +105,7 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
   // Preserve insertion order by sorting on the `order` field
   questions.sort((a, b) => a.order - b.order);
 
-  return {
+  const questionnaire: Questionnaire = {
     id: (meta.get('id') as string) ?? '',
     name: (meta.get('name') as string) ?? 'Untitled Questionnaire',
     description: (meta.get('description') as string) ?? '',
@@ -119,6 +128,8 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
     variables: variablesArr.toArray().map(yMapToVariable),
     flow: flowArr.toArray().map(yMapToFlow),
   };
+  assertNoJavaScriptHooks(questionnaire);
+  return questionnaire;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +149,6 @@ function pageToYMap(page: Page): Y.Map<unknown> {
 
   if (page.layout) yPage.set('layout', page.layout);
   if (page.conditions) yPage.set('conditions', page.conditions);
-  if (page.script) yPage.set('script', page.script);
 
   return yPage;
 }
@@ -208,7 +218,6 @@ function yMapToPage(yPage: Y.Map<unknown>): Page {
     blocks,
     layout: yPage.get('layout') as Page['layout'],
     conditions: yPage.get('conditions') as Page['conditions'],
-    script: yPage.get('script') as string | undefined,
   };
 }
 

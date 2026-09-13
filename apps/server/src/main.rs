@@ -161,6 +161,11 @@ async fn main() {
         config.session_create_rate_window_secs,
         redis.clone(),
     );
+    let session_sync_limiter = RateLimiter::new(
+        config.session_sync_rate_max,
+        config.session_sync_rate_window_secs,
+        redis.clone(),
+    );
     let questionnaire_create_limiter = RateLimiter::new(
         config.questionnaire_create_rate_max,
         config.questionnaire_create_rate_window_secs,
@@ -284,6 +289,7 @@ async fn main() {
         verify_attempt_limiter,
         api_key_rate_limiter,
         session_create_limiter,
+        session_sync_limiter,
         questionnaire_create_limiter,
         session_media_limiter,
         client_error_limiter,

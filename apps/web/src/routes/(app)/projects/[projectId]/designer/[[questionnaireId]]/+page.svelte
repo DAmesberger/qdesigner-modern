@@ -16,7 +16,6 @@
   import StructuralCanvas from './StructuralCanvas.svelte';
   import DesignerCommandPalette from './components/DesignerCommandPalette.svelte';
   import { moduleRegistry } from '$lib/modules/registry';
-  import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import TourOverlay from '$lib/help/components/TourOverlay.svelte';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { isEditableTarget } from '$lib/components/designer/designerKeyboard';
@@ -26,10 +25,7 @@
   }
 
   let { data }: Props = $props();
-
-  let scriptEditorOpen = $state(false);
-  let scriptEditorQuestion = $state<any>(null);
-  let scriptEditorCleanup: (() => void) | null = null;
+  let initializationError = $state<string | null>(null);
 
   // Full-canvas Reaction Lab. The trigger stays unchanged
   // (openLab → designerStore.openReactionLab → route fork on reactionLabQuestion);
@@ -79,7 +75,7 @@
   $effect(() => {
     const dirty = designerStore.isDirty;
     void designerStore.questionnaire; // re-run (reschedule) on each edit
-    if (!dirty) return;
+    if (!dirty || initializationError) return;
 
     const timer = setTimeout(() => {
       if (designerStore.isDirty && !designerStore.isSaving) {
@@ -96,6 +92,7 @@
   // not await async callbacks, but the save is a fetch already in flight by the time
   // the component tears down, so a best-effort fire persists the pending edits.
   beforeNavigate(() => {
+    if (initializationError) return;
     if (designerStore.isDirty && !designerStore.isSaving) {
       void designerStore.saveQuestionnaire().then((ok) => {
         if (ok) autoSave.resetTracking();
@@ -107,6 +104,7 @@
   // best-effort save AND trigger the browser's native unsaved-changes prompt; the
   // debounce above keeps the unsaved window small when the user proceeds anyway.
   function handleBeforeUnload(event: BeforeUnloadEvent) {
+    if (initializationError) return;
     if (designerStore.isDirty) {
       void designerStore.saveQuestionnaire();
       event.preventDefault();
@@ -130,22 +128,6 @@
   function disconnectPresence() {
     presence?.stop();
     presence = null;
-  }
-
-  function openScriptEditor(question: any) {
-    scriptEditorQuestion = question;
-    scriptEditorOpen = true;
-  }
-
-  function handleScriptEditorSave(script: string) {
-    if (scriptEditorQuestion) {
-      designerStore.updateQuestion(scriptEditorQuestion.id, {
-        settings: {
-          ...scriptEditorQuestion.settings,
-          script,
-        },
-      });
-    }
   }
 
   // A freshly-created questionnaire mints its id in the store, but the URL stays
@@ -265,6 +247,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    if (initializationError) return;
     const isMeta = event.ctrlKey || event.metaKey;
     const isInput = isEditableTarget(event.target);
 
@@ -380,14 +363,10 @@
   onMount(() => {
     void initializeDesigner().then(() => {
       connectPresence();
+    }).catch((error) => {
+      initializationError = error instanceof Error ? error.message : 'Failed to load questionnaire';
+      autoSave.stop();
     });
-
-    const handleOpenScriptEditor = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.question) openScriptEditor(detail.question);
-    };
-    window.addEventListener('open-script-editor', handleOpenScriptEditor);
-    scriptEditorCleanup = () => window.removeEventListener('open-script-editor', handleOpenScriptEditor);
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
@@ -400,12 +379,17 @@
     collabCleanup?.();
     collab?.destroy();
     collab = null;
-    scriptEditorCleanup?.();
   });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
+{#if initializationError}
+  <div class="p-8" role="alert" data-testid="designer-load-error">
+    <h1 class="text-xl font-semibold">Questionnaire could not be opened</h1>
+    <p class="mt-3 whitespace-pre-wrap">{initializationError}</p>
+  </div>
+{:else}
 <div class="h-screen flex flex-col bg-background" data-testid="designer-root">
   <DesignerHeader
     questionnaireName={designerStore.questionnaire.name}
@@ -451,11 +435,4 @@
   onclose={() => designerStore.toggleCommandPalette(false)}
 />
 <TourOverlay />
-{#if scriptEditorOpen && scriptEditorQuestion}
-  <ScriptEditorOverlay
-    question={scriptEditorQuestion}
-    variables={designerStore.questionnaire.variables}
-    onclose={() => { scriptEditorOpen = false; scriptEditorQuestion = null; }}
-    onsave={handleScriptEditorSave}
-  />
 {/if}
