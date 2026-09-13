@@ -88,6 +88,19 @@ jobs:
           src/lib/fillout/services/FilloutUploadSync.transient.test.ts
           src/lib/fillout/services/FilloutUploadSync.deadletter.test.ts
           src/lib/api/runtime.csrf-interceptor.test.ts
+      - name: Record acceptance environment
+        run: |
+          mkdir -p evidence
+          git show -s --format=fuller HEAD > evidence/revision.txt
+          {
+            node --version
+            pnpm --version
+            rustc --version
+            cargo --version
+            pnpm --filter @qdesigner/web exec playwright --version
+            docker compose -f docker-compose.test.yml images
+          } > evidence/environment.txt
+          pnpm --filter @qdesigner/web exec node --input-type=module -e 'import { chromium } from "@playwright/test"; const browser = await chromium.launch(); console.log(browser.version()); await browser.close();' > evidence/chromium-version.txt
       - name: Live-stack Chromium acceptance (no retries)
         run: |
           set -o pipefail
@@ -106,6 +119,7 @@ jobs:
             acceptance.log
             server.log
             infrastructure.log
+            evidence/
           retention-days: 14
       - name: Stop test infrastructure
         if: always()
