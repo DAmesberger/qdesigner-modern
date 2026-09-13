@@ -58,6 +58,29 @@ MinIO image pulls. The release images were verified and pulled from Quay; the
 server digest matches the previously tested local image. The failed runs remain
 visible in the PR history. Gates were not weakened to hide these failures.
 
+The first hosted browser run that reached application tests
+([34756836899](https://github.com/DAmesberger/qdesigner-modern/actions/runs/34756836899))
+passed 16 scenarios and failed four. Traces identified three causes:
+
+- Initial collaboration sync could overwrite edits made immediately after opening
+  the designer. Editing and autosave now wait for the authoritative document; a
+  delayed-WebSocket regression then completes the full authoring-to-data journey.
+- Session-status reads shared the login-attempt IP quota, causing a valid user's
+  reload to receive 429 and redirect to login. Reads now have a separate bounded
+  quota. Integration tests prove that reads preserve the credential-attempt budget
+  and still return 429 with Retry-After when their own quota is exhausted.
+- The offline binary test disconnected while its file component was still loading.
+  It now waits for the actual file input before disconnecting; capture, validation,
+  completion and subsequent recovery remain offline-first assertions.
+
+Follow-up review found no new specification violations or hard standards breaches.
+It noted minor duplicated rate-limit response construction and a stale comment,
+which was corrected. It also identified a preexisting collaboration dependency:
+HTTPS pages used an insecure WebSocket URL. The provider now selects WSS for HTTPS,
+with transport regressions covering HTTP, HTTPS and explicit URL overrides.
+Final hosted results and revision identity are recorded on the PR; the failed run
+above remains part of the evidence rather than being represented as a clean pass.
+
 The acceptance workflow retains the checked-out revision (GitHub's PR merge
 revision), tool/browser versions, service images, all Playwright traces, HTML report,
 console output, and backend/infrastructure logs for 14 days. The PR evidence also

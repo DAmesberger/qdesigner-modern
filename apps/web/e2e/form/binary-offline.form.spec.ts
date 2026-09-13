@@ -49,8 +49,9 @@ test.describe('@form binary answers — offline-first capture, deferred upload',
     // The file-upload module mounts online, then the network drops — captures run
     // client-side and stay pending until the reconnect sync (no eager online upload).
     const pngCard = await waitForCard(page, 'file-upload');
-    await context.setOffline(true);
     const pngInput = pngCard.locator('input[type=file]');
+    await expect(pngInput).toBeAttached();
+    await context.setOffline(true);
     const sizeError = page.getByTestId('file-upload-form-error');
 
     // An oversize synthetic file: blocks at capture with a size error and writes NO blob.
