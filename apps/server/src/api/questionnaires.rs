@@ -328,8 +328,8 @@ pub async fn create_questionnaire(
     .bind(user.user_id)
     .fetch_one(&mut **tx)
     .await
-    // A duplicate (project_id, name, version) trips the unique index; that is a
-    // benign conflict (retryable client-side), not a server fault. Map its 23505
+    // The database reserves names across revisions; a duplicate is a benign
+    // conflict (retryable client-side), not a server fault. Map its 23505
     // to a 409 rather than letting `?` route it through Database → 500.
     .map_err(ApiError::from_db_error)?;
 
@@ -706,7 +706,8 @@ pub async fn update_questionnaire(
 
     let q = query
         .fetch_optional(&mut **tx)
-        .await?
+        .await
+        .map_err(ApiError::from_db_error)?
         .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
     reconcile_variable_projection(

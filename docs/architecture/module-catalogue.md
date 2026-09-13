@@ -71,3 +71,11 @@ to check discovery and default field placement. Mounted component tests verify
 response capture through the production runtime adapter. Browser tests in
 `qdef-modules.fullstack.spec.ts` cover authoring, portable exchange and editor
 round trips; participant acceptance tests verify persisted outcomes.
+
+The all-module exchange journey imports into another project, preserving the
+authored name. Names are reserved within a project independently of mutable
+revisions. Migration 00063 replaces the former `(project_id, name, version)`
+uniqueness rule with a transaction-serialized name reservation on creation and
+rename. Existing duplicates remain editable; the migration does not rename or
+delete them. Conflicting QDef imports return `QDEF_NAME_CONFLICT`, and native
+create/rename returns HTTP 409. Saving a draft does not release its name.

@@ -120,7 +120,19 @@ test('@fullstack all form catalogue modules can be authored, exported, imported 
     aggregation: 'none',
   });
 
-  await page.goto(`/projects/${workspace.projectId}`);
+  // Portable exchange targets another project; names are reserved within a project.
+  const destination = await request.post('/api/projects', {
+    headers: { ...headers, 'X-CSRF-Token': workspace.csrfToken },
+    data: {
+      organization_id: workspace.organizationId,
+      name: 'Imported forms',
+      code: `copy-${Date.now()}`,
+      is_public: true,
+    },
+  });
+  expect(destination.status(), await destination.text()).toBe(201);
+  const destinationId = (await destination.json()).id;
+  await page.goto(`/projects/${destinationId}`);
   await page.getByRole('button', { name: 'Import Definition', exact: true }).click();
   await page.getByTestId('qdef-file-input').setInputFiles({
     name: 'forms.qdef.json',
@@ -129,7 +141,7 @@ test('@fullstack all form catalogue modules can be authored, exported, imported 
   });
   await expect(page.getByTestId('qdef-validation-heading')).toHaveText('Definition is valid');
   await page.getByRole('button', { name: 'Create Draft', exact: true }).click();
-  await page.waitForURL(new RegExp(`/projects/${workspace.projectId}/designer/[^/]+$`));
+  await page.waitForURL(new RegExp(`/projects/${destinationId}/designer/[^/]+$`));
   const imported = new DesignerPage(page);
   await imported.expectLoaded();
   const importedId = new URL(page.url()).pathname.split('/').at(-1)!;
@@ -145,7 +157,10 @@ test('@fullstack all form catalogue modules can be authored, exported, imported 
   }
   await saveAndReload(imported);
   await expect(imported.questionCards).toHaveCount(FORM_TYPES.length);
-  const reread = await request.get(`${endpoint}/${importedId}/definition`, { headers });
+  const reread = await request.get(
+    `/api/projects/${destinationId}/questionnaires/${importedId}/definition`,
+    { headers }
+  );
   expect(reread.status(), await reread.text()).toBe(200);
   const result = await reread.json();
   expect(result.canonical).toBe(artifact.canonical);

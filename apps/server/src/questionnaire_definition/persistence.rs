@@ -231,9 +231,10 @@ pub(super) async fn apply_prepared(
             .bind(version[0]).bind(version[1]).bind(version[2]).bind(id).execute(&mut *tx).await
     };
     if let Err(failure) = written {
-        if failure.as_database_error().is_some_and(|e| {
-            e.constraint() == Some("questionnaire_definitions_project_id_name_version_key")
-        }) {
+        if failure
+            .as_database_error()
+            .is_some_and(|e| e.constraint() == Some("questionnaire_definitions_project_name_key"))
+        {
             return Ok(invalid(vec![error("QDEF_NAME_CONFLICT", "/questionnaire/name",
                 "A questionnaire with this name already exists in this project.",
                 Some("Choose a different questionnaire name and inspect the definition again, or import into another project."))]));
