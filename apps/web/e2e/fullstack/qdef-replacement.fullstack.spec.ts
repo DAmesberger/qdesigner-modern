@@ -31,13 +31,11 @@ async function prepareDraft(page: Page, request: APIRequestContext) {
   await installAuthSession(page, workspace);
   await page.goto(`/projects/${workspace.projectId}`);
   await page.getByRole('button', { name: 'Import Definition', exact: true }).click();
-  await page
-    .getByTestId('qdef-file-input')
-    .setInputFiles({
-      name: 'before.qdef.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(definition)),
-    });
+  await page.getByTestId('qdef-file-input').setInputFiles({
+    name: 'before.qdef.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(definition)),
+  });
   await expect(page.getByTestId('qdef-validation-heading')).toHaveText('Definition is valid');
   await page.getByRole('button', { name: 'Create Draft', exact: true }).click();
   await page.waitForURL(new RegExp(`/projects/${workspace.projectId}/designer/[^/]+$`));
@@ -141,15 +139,14 @@ for (const concurrentEdit of [false, true]) {
         r.url().endsWith('/questionnaire-definitions/apply') &&
         r.request().postDataJSON().commit === false
     );
-    await page
-      .getByTestId('qdef-file-input')
-      .setInputFiles({
-        name: 'replacement.qdef.json',
-        mimeType: 'application/json',
-        buffer: Buffer.from(JSON.stringify(definition)),
-      });
+    await page.getByTestId('qdef-file-input').setInputFiles({
+      name: 'replacement.qdef.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(definition)),
+    });
     const preview = await (await previewResponse).json();
     await expect(page.getByTestId('qdef-validation-heading')).toHaveText('Definition is valid');
+    await expect(page.getByTestId('qdef-semantic-diff')).toContainText('Replacement from dialog');
     if (concurrentEdit) {
       const session = await request.get('/api/auth/session', { headers });
       headers['X-CSRF-Token'] = (await session.json()).csrf_token;
@@ -173,9 +170,9 @@ for (const concurrentEdit of [false, true]) {
         'Definition needs attention'
       );
       await expect(page.getByTestId('qdef-diagnostics')).toContainText('REVISION_CONFLICT');
-      await expect(
-        page.getByTestId('qdef-revision-conflict-guidance')
-      ).toContainText(`The current server revision is ${preview.revision + 1}.`);
+      await expect(page.getByTestId('qdef-revision-conflict-guidance')).toContainText(
+        `The current server revision is ${preview.revision + 1}.`
+      );
       await expect(
         page.getByRole('button', { name: 'Reload Current Draft', exact: true })
       ).toBeVisible();
@@ -239,4 +236,75 @@ test('@fullstack reconnecting an offline collaborator cannot merge its old edits
   await saveAndReload(designer);
   const after = await request.get(`${endpoint}/definition`, { headers });
   expect((await after.json()).digest).toBe(committed.digest);
+});
+
+test('@fullstack stable edits reload into the designer and retain their original retry receipt', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120000);
+  const { workspace, designer, questionnaireId, endpoint, headers } = await prepareDraft(
+    page,
+    request
+  );
+  const exported = await request.get(`${endpoint}/definition`, { headers });
+  const before = await exported.json();
+  const session = await request.get('/api/auth/session', { headers });
+  headers['X-CSRF-Token'] = (await session.json()).csrf_token;
+  const data = {
+    edits: [
+      { op: 'replace', path: '/questionnaire/name', value: 'Study after stable edits' },
+      {
+        op: 'replace',
+        path: '/questions/@welcome/display/content',
+        value: 'Edited welcome instruction',
+      },
+      {
+        op: 'add',
+        path: '/questions/@second',
+        value: { type: 'text-instruction', display: { content: 'Second instruction' } },
+      },
+      {
+        op: 'add',
+        path: '/pages/@page/blocks/@block/questions/@second',
+        value: 'second',
+        before: 'welcome',
+      },
+    ],
+    questionnaireId,
+    expectedRevision: before.revision,
+    commit: false,
+    idempotencyKey: `edits-${questionnaireId}`,
+  };
+  const applyUri = `/api/projects/${workspace.projectId}/questionnaire-definitions/apply`;
+  const previewResponse = await request.post(applyUri, { headers, data });
+  expect(previewResponse.status(), await previewResponse.text()).toBe(200);
+  const preview = await previewResponse.json();
+  expect(preview.valid).toBe(true);
+  expect(preview.committed).toBe(false);
+  await expect(designer.questionCards).toHaveCount(1);
+  data.commit = true;
+  const committedResponse = await request.post(applyUri, { headers, data });
+  expect(committedResponse.status(), await committedResponse.text()).toBe(200);
+  const committed = await committedResponse.json();
+  expect(committed.diff).toEqual(preview.diff);
+  expect(committed.beforeDigest).toBe(before.digest);
+  expect(committed.revision).toBe(before.revision + 1);
+  await expect(page.getByTestId('designer-replacement-conflict')).toBeVisible({ timeout: 10000 });
+  await page.getByRole('button', { name: 'Reload Current Draft', exact: true }).click();
+  await designer.expectLoaded();
+  await expect(page.getByTestId('designer-title')).toHaveText('Study after stable edits');
+  await expect(designer.questionCards).toHaveCount(2);
+  await saveAndReload(designer);
+  const afterResponse = await request.get(`${endpoint}/definition`, { headers });
+  const after = await afterResponse.json();
+  expect(after.digest).toBe(committed.digest);
+  const document = JSON.parse(after.canonical);
+  expect(document.structure.pages[0].blocks[0].questionIds).toEqual(['second', 'welcome']);
+  expect(document.questions.welcome.display.content).toBe('Edited welcome instruction');
+  const renewedSession = await request.get('/api/auth/session', { headers });
+  headers['X-CSRF-Token'] = (await renewedSession.json()).csrf_token;
+  const retried = await request.post(applyUri, { headers, data });
+  expect(retried.status(), await retried.text()).toBe(200);
+  expect(await retried.json()).toEqual(committed);
 });

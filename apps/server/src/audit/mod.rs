@@ -31,6 +31,7 @@ use crate::error::ApiError;
 pub enum AuditAction {
     QuestionnaireDefinitionImported,
     QuestionnaireDefinitionReplaced,
+    QuestionnaireDefinitionEdited,
     MemberAdded,
     MemberRoleChanged,
     MemberRemoved,
@@ -102,6 +103,7 @@ impl AuditAction {
         match self {
             AuditAction::QuestionnaireDefinitionImported => "questionnaire.definition_imported",
             AuditAction::QuestionnaireDefinitionReplaced => "questionnaire.definition_replaced",
+            AuditAction::QuestionnaireDefinitionEdited => "questionnaire.definition_edited",
             AuditAction::MemberAdded => "member.added",
             AuditAction::MemberRoleChanged => "member.role_changed",
             AuditAction::MemberRemoved => "member.removed",

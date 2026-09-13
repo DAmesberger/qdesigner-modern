@@ -5,35 +5,39 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use super::{
-    error, invalid, ApplyResult, QDefDocument, StoredQuestionnaire, StoredQuestionnaireRow,
-    ValidatedDefinitionChange,
+    error, invalid, ApplyResult, DefinitionDiagnostic, PreparedChange, PreparedDefinitionChange,
+    PreparedDocument, QDefDocument, StoredQuestionnaire, StoredQuestionnaireRow,
 };
 use crate::audit::{self, AuditAction, AuditEvent};
 use crate::error::ApiError;
 
-pub(super) async fn apply_validated(
+pub(super) async fn apply_prepared(
     connection: &mut PgConnection,
     actor: Uuid,
-    input: ValidatedDefinitionChange,
+    input: PreparedDefinitionChange,
 ) -> Result<ApplyResult, ApiError> {
-    let document = &input.document;
-    let version = super::semantic_version(&document.questionnaire.version).ok_or_else(|| {
-        ApiError::Internal("Validated definition has an unsupported version".into())
-    })?;
-    let mut result = input.result;
-    let digest = result
-        .digest
-        .clone()
-        .ok_or_else(|| ApiError::Internal("Validated definition has no digest".into()))?;
-    // Creation receipts retain their existing identity. Replacement binds the
-    // same key to its target and expected revision as well as portable content.
+    // Edit receipt identity depends on the command, not a result re-derived
+    // against a later document. Creation/replacement keep existing identities.
+    let (change_kind, payload) =
+        match &input.change {
+            PreparedChange::Replace(prepared) => (
+                "replace",
+                prepared.result.digest.clone().ok_or_else(|| {
+                    ApiError::Internal("Prepared definition has no digest".into())
+                })?,
+            ),
+            PreparedChange::Edits(edits) => (
+                "edits",
+                serde_jcs::to_string(edits).map_err(|e| ApiError::Internal(e.to_string()))?,
+            ),
+        };
     let request_digest = match input.target {
-        None => digest.clone(),
+        None => payload,
         Some(target) => format!(
             "sha256:{}",
             hex::encode(Sha256::digest(
                 format!(
-                    "replace\0{}\0{}\0{digest}",
+                    "{change_kind}\0{}\0{}\0{payload}",
                     target.questionnaire_id, target.expected_revision
                 )
                 .as_bytes()
@@ -81,56 +85,110 @@ pub(super) async fn apply_validated(
         }
     }
 
-    let now = chrono::Utc::now();
-    let (id, revision, epoch, created_at) = if let Some(target) = input.target {
-        let current: Option<(i32, String, i32, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+    let current = if let Some(target) = input.target {
+        let row: Option<(i32, String, i32, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
             "SELECT version,status,collaboration_epoch,created_at FROM questionnaire_definitions WHERE id=$1 AND project_id=$2 AND deleted_at IS NULL FOR UPDATE"
         ).bind(target.questionnaire_id).bind(input.project_id).fetch_optional(&mut *tx).await?;
-        let (current_revision, status, epoch, created_at) =
-            current.ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
-        if current_revision != target.expected_revision {
-            let mut conflict = invalid(vec![error("REVISION_CONFLICT", "/expectedRevision",
-                "The draft changed after the revision you selected.",
-                Some("Reload the current draft, review your incoming definition, and retry using the current revision."))]);
+        let (revision, status, epoch, created_at) =
+            row.ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+        if revision != target.expected_revision {
+            let mut conflict = invalid(vec![error("REVISION_CONFLICT", "/expectedRevision", "The draft changed after the revision you selected.", Some("Reload the current draft, review your change, and retry using the current revision."))]);
             conflict.questionnaire_id = Some(target.questionnaire_id);
-            conflict.revision = Some(current_revision);
+            conflict.revision = Some(revision);
             return Ok(conflict);
         }
         if status != "draft" {
             return Ok(invalid(vec![error(
                 "QDEF_TARGET_NOT_DRAFT",
                 "/questionnaireId",
-                "Only a draft can be replaced by a definition import.",
+                "Only a draft can be changed through Definition apply.",
                 Some("Select an editable draft or create a new draft from this definition."),
             )]));
         }
         let stored = sqlx::query_as::<_, StoredQuestionnaireRow>(
             "SELECT name,description,version AS revision,version_major,version_minor,version_patch,content,COALESCE(settings,'{}'::jsonb) AS settings FROM questionnaire_definitions WHERE id=$1 AND project_id=$2"
         ).bind(target.questionnaire_id).bind(input.project_id).fetch_one(&mut *tx).await?;
-        // The historical snapshot preserves native storage verbatim, including
-        // modules not yet exportable through QDef. Only the incoming document
-        // must pass portable validation. Do not invent a digest for a prior
-        // document outside the current portable capabilities.
-        if let Ok(before) = super::document_from_stored(StoredQuestionnaire::from(stored)) {
-            if !super::has_errors(&super::validate(&before)) {
-                result.before_digest =
-                    Some(super::canonicalize(&before).map_err(ApiError::Internal)?.1);
+        let document =
+            super::document_from_stored(StoredQuestionnaire::from(stored)).and_then(|document| {
+                let diagnostics = super::validate(&document);
+                if super::has_errors(&diagnostics) {
+                    Err(diagnostics)
+                } else {
+                    Ok(document)
+                }
+            });
+        Some(CurrentDraft {
+            id: target.questionnaire_id,
+            revision,
+            epoch,
+            created_at,
+            document,
+        })
+    } else {
+        None
+    };
+
+    let PreparedDocument {
+        document,
+        mut result,
+    } = match input.change {
+        PreparedChange::Replace(prepared) => *prepared,
+        PreparedChange::Edits(edits) => {
+            let prior = current
+                .as_ref()
+                .ok_or_else(|| ApiError::Internal("Prepared edits have no target".into()))?;
+            let before = match &prior.document {
+                Ok(document) => document,
+                Err(diagnostics) => return Ok(invalid(diagnostics.clone())),
+            };
+            let before =
+                serde_json::to_value(before).map_err(|e| ApiError::Internal(e.to_string()))?;
+            let after = match super::edits::apply(&before, &edits) {
+                Ok(value) => value,
+                Err(diagnostics) => return Ok(invalid(diagnostics)),
+            };
+            match super::prepare_document(after) {
+                Ok(prepared) => prepared,
+                Err(diagnostics) => return Ok(invalid(diagnostics)),
             }
         }
-        result.questionnaire_id = Some(target.questionnaire_id);
-        result.revision = Some(current_revision);
-        if !input.commit {
-            tx.commit().await?;
-            return Ok(result);
+    };
+    let version = super::semantic_version(&document.questionnaire.version).ok_or_else(|| {
+        ApiError::Internal("Prepared definition has an unsupported version".into())
+    })?;
+    let digest = result
+        .digest
+        .clone()
+        .ok_or_else(|| ApiError::Internal("Prepared definition has no digest".into()))?;
+    if let Some(prior) = &current {
+        // A native draft can be snapshotted even when it is not yet portable.
+        // Never invent a prior digest or semantic diff for that case.
+        if let Ok(before) = &prior.document {
+            result.before_digest = Some(super::canonicalize(before).map_err(ApiError::Internal)?.1);
+            result.diff = Some(super::diff::between(
+                &serde_json::to_value(before).map_err(|e| ApiError::Internal(e.to_string()))?,
+                &serde_json::to_value(&document).map_err(|e| ApiError::Internal(e.to_string()))?,
+            ));
         }
-        let revision = current_revision
+        result.questionnaire_id = Some(prior.id);
+        result.revision = Some(prior.revision);
+    }
+    if !input.commit {
+        tx.commit().await?;
+        return Ok(result);
+    }
+    let now = chrono::Utc::now();
+    let (id, revision, epoch, created_at) = if let Some(prior) = current {
+        let revision = prior
+            .revision
             .checked_add(1)
             .ok_or_else(|| ApiError::Conflict("Revision limit reached".into()))?;
-        let epoch = epoch
+        let epoch = prior
+            .epoch
             .checked_add(1)
             .ok_or_else(|| ApiError::Conflict("Collaboration generation limit reached".into()))?;
-        snapshot_questionnaire_version(&mut tx, target.questionnaire_id, actor).await?;
-        (target.questionnaire_id, revision, epoch, created_at)
+        snapshot_questionnaire_version(&mut tx, prior.id, actor).await?;
+        (prior.id, revision, epoch, prior.created_at)
     } else {
         (Uuid::new_v4(), 1, 0, now)
     };
@@ -145,7 +203,7 @@ pub(super) async fn apply_validated(
     if let Some(locale) = &document.questionnaire.default_locale {
         settings["language"] = json!(locale);
     }
-    let mut content = persisted_content(document)?;
+    let mut content = persisted_content(&document)?;
     content["id"] = json!(id);
     content["projectId"] = json!(input.project_id);
     content["organizationId"] = json!(organization_id);
@@ -184,10 +242,10 @@ pub(super) async fn apply_validated(
     super::reconcile_variable_projection(&mut tx, id, version, &content).await?;
     audit::record(&mut tx, AuditEvent {
         organization_id, actor_user_id: actor,
-        action: if input.target.is_some() { AuditAction::QuestionnaireDefinitionReplaced } else { AuditAction::QuestionnaireDefinitionImported },
+        action: if change_kind == "edits" { AuditAction::QuestionnaireDefinitionEdited } else if input.target.is_some() { AuditAction::QuestionnaireDefinitionReplaced } else { AuditAction::QuestionnaireDefinitionImported },
         resource_type: audit::resource::QUESTIONNAIRE, resource_id: Some(id),
         metadata: json!({"projectId": input.project_id, "idempotencyKey": input.idempotency_key,
-            "beforeDigest": result.before_digest, "afterDigest": digest, "revision": revision, "collaborationEpoch": epoch}), ip: None,
+            "beforeDigest": result.before_digest, "afterDigest": digest, "operation": change_kind, "revision": revision, "collaborationEpoch": epoch}), ip: None,
     }).await?;
     result.committed = true;
     result.questionnaire_id = Some(id);
@@ -199,6 +257,14 @@ pub(super) async fn apply_validated(
     tx.commit().await?;
     Ok(result)
 }
+struct CurrentDraft {
+    id: Uuid,
+    revision: i32,
+    epoch: i32,
+    created_at: chrono::DateTime<chrono::Utc>,
+    document: Result<QDefDocument, Vec<DefinitionDiagnostic>>,
+}
+
 fn persisted_content(document: &QDefDocument) -> Result<Value, ApiError> {
     let mut questions = Vec::new();
     for (order, (id, question)) in document.questions.iter().enumerate() {

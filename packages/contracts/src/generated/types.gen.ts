@@ -57,7 +57,8 @@ export type ApiKeyRecord = {
 };
 
 export type ApplyQuestionnaireDefinitionRequest = {
-    definition: string;
+    definition?: string | null;
+    edits?: Array<StableDefinitionEdit> | null;
     commit?: boolean;
     idempotencyKey?: string | null;
     questionnaireId?: string | null;
@@ -72,6 +73,7 @@ export type ApplyResult = {
     canonical?: string | null;
     digest?: string | null;
     beforeDigest?: string | null;
+    diff?: null | SemanticDiff;
     metadata?: null | DefinitionMetadata;
     diagnostics: Array<DefinitionDiagnostic>;
 };
@@ -1271,6 +1273,20 @@ export type SeatUsageResponse = {
     pending_invitations: number;
 };
 
+export type SemanticChange = {
+    kind: SemanticChangeKind;
+    path: string;
+    summary: string;
+};
+
+export type SemanticChangeKind = 'added' | 'removed' | 'changed' | 'orderChanged' | 'referencesChanged';
+
+export type SemanticDiff = {
+    entries: Array<SemanticChange>;
+    totalChanges: number;
+    truncated: boolean;
+};
+
 export type SendVerificationCodeRequest = {
     email: string;
 };
@@ -1471,6 +1487,25 @@ export type SetDataRegionRequest = {
  */
 export type SetLegalHoldRequest = {
     legal_hold: boolean;
+};
+
+export type StableDefinitionEdit = {
+    path: string;
+    value: unknown;
+    before?: string | null;
+    op: 'add';
+} | {
+    path: string;
+    value: unknown;
+    op: 'replace';
+} | {
+    path: string;
+    op: 'remove';
+} | {
+    from: string;
+    path: string;
+    before?: string | null;
+    op: 'move';
 };
 
 export type SuccessResponse = {

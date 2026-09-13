@@ -1,7 +1,7 @@
 use qdesigner_server::error::ApiError;
 use qdesigner_server::questionnaire_definition::{
     ApplyInput, ApplyResult, DefinitionAccess, DefinitionCapability, DefinitionReadFailure,
-    QuestionnaireDefinition, ReadInput, StoredQuestionnaire, ValidatedDefinitionChange,
+    PreparedDefinitionChange, QuestionnaireDefinition, ReadInput, StoredQuestionnaire,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -14,9 +14,9 @@ struct FakeAccess {
 }
 
 impl DefinitionAccess for FakeAccess {
-    async fn apply_validated(
+    async fn apply_prepared(
         &mut self,
-        _input: ValidatedDefinitionChange,
+        _input: PreparedDefinitionChange,
     ) -> Result<ApplyResult, ApiError> {
         panic!("Validation-only contract must not reach persistence");
     }
@@ -54,7 +54,8 @@ async fn a_commit_requires_a_nonempty_bounded_idempotency_key() {
         let result = QuestionnaireDefinition::new(FakeAccess::default())
             .apply(ApplyInput {
                 project_id,
-                definition: minimal_definition().to_string(),
+                definition: Some(minimal_definition().to_string()),
+                edits: None,
                 commit: true,
                 idempotency_key: key,
                 questionnaire_id: None,
@@ -95,7 +96,8 @@ async fn invalid_questionnaire_metadata_is_rejected_equally_before_inspection_an
             let result = QuestionnaireDefinition::new(FakeAccess::default())
                 .apply(ApplyInput {
                     project_id,
-                    definition: definition.to_string(),
+                    definition: Some(definition.to_string()),
+                    edits: None,
                     commit,
                     idempotency_key: Some("invalid-metadata".into()),
                     questionnaire_id: None,
@@ -209,7 +211,8 @@ async fn text_only_qdef_round_trips_through_the_questionnaire_definition_interfa
     let inspected = definitions
         .apply(ApplyInput {
             project_id,
-            definition: exported.canonical.clone(),
+            definition: Some(exported.canonical.clone()),
+            edits: None,
             commit: false,
             idempotency_key: None,
             questionnaire_id: None,
@@ -300,12 +303,15 @@ async fn unsupported_qdef_versions_return_stable_structured_diagnostics() {
     let result = definitions
         .apply(ApplyInput {
             project_id,
-            definition: json!({
-            "$schema": "https://schemas.qdesigner.dev/questionnaire/1.0.0",
-            "format": "qdesigner.questionnaire",
-            "formatVersion": "2.0.0"
-            })
-            .to_string(),
+            definition: Some(
+                json!({
+                "$schema": "https://schemas.qdesigner.dev/questionnaire/1.0.0",
+                "format": "qdesigner.questionnaire",
+                "formatVersion": "2.0.0"
+                })
+                .to_string(),
+            ),
+            edits: None,
             commit: false,
             idempotency_key: None,
             questionnaire_id: None,
@@ -332,7 +338,8 @@ async fn malformed_json_is_reported_by_the_questionnaire_definition_interface() 
     let result = definitions
         .apply(ApplyInput {
             project_id,
-            definition: "{ definitely not JSON".into(),
+            definition: Some("{ definitely not JSON".into()),
+            edits: None,
             commit: false,
             idempotency_key: None,
             questionnaire_id: None,
@@ -353,13 +360,16 @@ async fn duplicate_raw_json_registry_keys_are_rejected_before_deserialization() 
     let result = definitions
         .apply(ApplyInput {
             project_id,
-            definition: r#"{
+            definition: Some(
+                r#"{
                 "$schema":"https://schemas.qdesigner.dev/questionnaire/1.0.0",
                 "format":"qdesigner.questionnaire",
                 "formatVersion":"1.0.0",
                 "questions":{"question: alpha":{},"question: alpha":{}}
             }"#
-            .into(),
+                .into(),
+            ),
+            edits: None,
             commit: false,
             idempotency_key: None,
             questionnaire_id: None,
@@ -517,7 +527,8 @@ async fn executable_payloads_are_rejected_at_the_inspection_boundary() {
         let result = QuestionnaireDefinition::new(FakeAccess::default())
             .apply(ApplyInput {
                 project_id,
-                definition: document.to_string(),
+                definition: Some(document.to_string()),
+                edits: None,
                 commit: false,
                 idempotency_key: None,
                 questionnaire_id: None,
@@ -551,7 +562,8 @@ async fn unsafe_content_has_the_same_actionable_findings_for_inspection_and_comm
         let result = QuestionnaireDefinition::new(FakeAccess::default())
             .apply(ApplyInput {
                 project_id,
-                definition: document.to_string(),
+                definition: Some(document.to_string()),
+                edits: None,
                 commit,
                 idempotency_key: None,
                 questionnaire_id: None,
@@ -611,7 +623,8 @@ async fn executable_aliases_cannot_hide_in_nested_module_configuration() {
         let result = QuestionnaireDefinition::new(FakeAccess::default())
             .apply(ApplyInput {
                 project_id,
-                definition: document.to_string(),
+                definition: Some(document.to_string()),
+                edits: None,
                 commit: false,
                 idempotency_key: None,
                 questionnaire_id: None,
@@ -651,7 +664,8 @@ async fn retired_lifecycle_names_cannot_be_imported_as_nested_configuration() {
             let result = QuestionnaireDefinition::new(FakeAccess::default())
                 .apply(ApplyInput {
                     project_id,
-                    definition: definition.to_string(),
+                    definition: Some(definition.to_string()),
+                    edits: None,
                     commit,
                     idempotency_key: Some("retired-hook".into()),
                     questionnaire_id: None,
@@ -688,7 +702,8 @@ async fn stable_question_identifiers_are_data_not_executable_field_names() {
         let result = QuestionnaireDefinition::new(FakeAccess::default())
             .apply(ApplyInput {
                 project_id,
-                definition: document.to_string(),
+                definition: Some(document.to_string()),
+                edits: None,
                 commit: false,
                 idempotency_key: None,
                 questionnaire_id: None,
@@ -728,7 +743,8 @@ async fn unsupported_tracer_capabilities_do_not_receive_a_valid_digest() {
         let result = QuestionnaireDefinition::new(FakeAccess::default())
             .apply(ApplyInput {
                 project_id,
-                definition: document.to_string(),
+                definition: Some(document.to_string()),
+                edits: None,
                 commit: false,
                 idempotency_key: None,
                 questionnaire_id: None,
@@ -754,7 +770,8 @@ async fn passive_html_and_literal_script_discussion_remain_portable_text() {
     let result = QuestionnaireDefinition::new(FakeAccess::default())
         .apply(ApplyInput {
             project_id,
-            definition: document.to_string(),
+            definition: Some(document.to_string()),
+            edits: None,
             commit: false,
             idempotency_key: None,
             questionnaire_id: None,
@@ -795,7 +812,8 @@ async fn javascript_language_markers_and_executable_ast_nodes_are_not_opaque_con
             let result = QuestionnaireDefinition::new(FakeAccess::default())
                 .apply(ApplyInput {
                     project_id,
-                    definition: definition.to_string(),
+                    definition: Some(definition.to_string()),
+                    edits: None,
                     commit,
                     idempotency_key: Some("unsafe-ast".into()),
                     questionnaire_id: None,

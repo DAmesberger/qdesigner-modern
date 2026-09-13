@@ -218,6 +218,27 @@
           {/if}
         </div>
 
+        {#if result.diff}
+          <div data-testid="qdef-semantic-diff">
+            <h3 class="text-sm font-medium text-foreground">Changes in this draft</h3>
+            {#if result.diff.totalChanges === 0}
+              <p class="mt-2 text-sm text-muted-foreground">The definition is unchanged.</p>
+            {:else}
+              <ul class="mt-2 max-h-64 space-y-2 overflow-auto text-sm">
+                {#each result.diff.entries as change}
+                  <li class="break-words rounded-md border border-border p-2">{change.summary}</li>
+                {/each}
+              </ul>
+              {#if result.diff.truncated}
+                <p class="mt-2 text-sm text-muted-foreground">
+                  Showing {result.diff.entries.length} of {result.diff.totalChanges} changes. The complete
+                  definition will be applied.
+                </p>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
         <div>
           <h3 class="text-sm font-medium text-foreground">Diagnostics</h3>
           {#if result.diagnostics.length === 0}

@@ -3,10 +3,14 @@
 //! HTTP, UI, and future MCP adapters must cross this interface instead of
 //! maintaining their own serializers or validators.
 
+mod diff;
+mod edits;
 mod persistence;
 mod projections;
 mod safety;
 
+pub use diff::{SemanticChange, SemanticChangeKind, SemanticDiff};
+pub use edits::StableDefinitionEdit;
 pub(crate) use persistence::snapshot_questionnaire_version;
 pub(crate) use projections::reconcile_variable_projection;
 
@@ -54,19 +58,28 @@ pub trait DefinitionAccess {
         questionnaire_id: Uuid,
     ) -> Result<Option<StoredQuestionnaire>, ApiError>;
 
-    async fn apply_validated(
+    async fn apply_prepared(
         &mut self,
-        input: ValidatedDefinitionChange,
+        input: PreparedDefinitionChange,
     ) -> Result<ApplyResult, ApiError>;
 }
 
-/// A validated definition change. Only the Definition Module constructs it;
-/// Repository adapters cannot substitute unvalidated input for its document.
-pub struct ValidatedDefinitionChange {
+/// A prepared change. Only the Definition Module constructs it. Edit batches
+/// are resolved and validated against the locked current document before writes.
+pub struct PreparedDefinitionChange {
     project_id: Uuid,
     idempotency_key: Option<String>,
     target: Option<ReplacementTarget>,
     commit: bool,
+    change: PreparedChange,
+}
+
+enum PreparedChange {
+    Replace(Box<PreparedDocument>),
+    Edits(Vec<StableDefinitionEdit>),
+}
+
+struct PreparedDocument {
     document: QDefDocument,
     result: ApplyResult,
 }
@@ -94,11 +107,11 @@ impl<'a> PostgresDefinitionAccess<'a> {
 }
 
 impl DefinitionAccess for PostgresDefinitionAccess<'_> {
-    async fn apply_validated(
+    async fn apply_prepared(
         &mut self,
-        input: ValidatedDefinitionChange,
+        input: PreparedDefinitionChange,
     ) -> Result<ApplyResult, ApiError> {
-        persistence::apply_validated(self.connection, self.user_id, input).await
+        persistence::apply_prepared(self.connection, self.user_id, input).await
     }
 
     async fn authorize(
@@ -191,7 +204,9 @@ pub struct ReadInput {
 pub struct ApplyInput {
     pub project_id: Uuid,
     /// Raw UTF-8 JSON. Parsing is owned by this Module, never by an Adapter.
-    pub definition: String,
+    pub definition: Option<String>,
+    /// Raw JSON edit array, parsed with the same duplicate-key and safety policy.
+    pub edits: Option<String>,
     pub commit: bool,
     pub idempotency_key: Option<String>,
     pub questionnaire_id: Option<Uuid>,
@@ -224,6 +239,8 @@ pub struct ApplyResult {
     pub digest: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub before_digest: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff: Option<SemanticDiff>,
     pub metadata: Option<DefinitionMetadata>,
     pub diagnostics: Vec<DefinitionDiagnostic>,
 }
@@ -565,87 +582,26 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
         self.access
             .authorize(input.project_id, DefinitionCapability::Write)
             .await?;
-
-        let raw_definition = match parse_unique_json(&input.definition) {
-            Ok(definition) => definition,
-            Err(parse_error) => {
-                let parse_message = parse_error.to_string();
-                let duplicate = parse_message
-                    .split_once("QDEF_DUPLICATE_KEY_AT_HEX:")
-                    .and_then(|(_, payload)| payload.split_once(": "))
-                    .and_then(|(encoded_path, message)| {
-                        String::from_utf8(hex::decode(encoded_path).ok()?)
-                            .ok()
-                            .map(|path| (path, message))
-                    });
-                return Ok(invalid(vec![error(
-                    if duplicate.is_some() {
-                        "QDEF_DUPLICATE_KEY"
-                    } else {
-                        "QDEF_JSON_INVALID"
-                    },
-                    duplicate.as_ref().map_or("/", |(path, _)| path.as_str()),
-                    if let Some((_, message)) = duplicate.as_ref() {
-                        (*message).to_owned()
-                    } else {
-                        format!("Definition is not valid JSON: {parse_error}")
-                    },
-                    if duplicate.is_some() {
-                        Some("Give every object member, including stable-id registry keys, a unique name.")
-                    } else {
-                        Some("Upload a UTF-8 JSON file exported by QDesigner.")
-                    },
-                )]));
-            }
-        };
-
-        let mut envelope_diagnostics = validate_envelope(&raw_definition);
-        safety::inspect(&raw_definition, "", &mut envelope_diagnostics);
-        if has_errors(&envelope_diagnostics) {
-            return Ok(invalid(envelope_diagnostics));
-        }
-
-        let document: QDefDocument = match serde_json::from_value(raw_definition) {
-            Ok(document) => document,
-            Err(parse_error) => {
-                return Ok(invalid(vec![error(
-                    "QDEF_SCHEMA_INVALID",
-                    "/",
-                    format!("Definition does not match the supported QDef schema: {parse_error}"),
-                    Some("Use the exported .qdef.json shape and remove unknown core fields."),
-                )]));
-            }
-        };
-
-        let diagnostics = validate(&document);
-        if has_errors(&diagnostics) {
-            return Ok(invalid(diagnostics));
-        }
-
-        let result = match canonicalize(&document) {
-            Ok((canonical, digest)) => ApplyResult {
-                valid: true,
-                committed: false,
-                questionnaire_id: None,
-                revision: None,
-                metadata: Some(metadata(&document)),
-                canonical: Some(canonical),
-                digest: Some(digest),
-                before_digest: None,
-                diagnostics,
+        let change = match (input.definition, input.edits) {
+            (Some(source), None) => match parse_source(&source).and_then(prepare_document) {
+                Ok(prepared) => PreparedChange::Replace(Box::new(prepared)),
+                Err(diagnostics) => return Ok(invalid(diagnostics)),
             },
-            Err(message) => invalid(vec![error(
-                "QDEF_CANONICALIZATION_FAILED",
-                "/",
-                message,
-                Some("Remove non-finite or otherwise non-canonical JSON values."),
-            )]),
+            (None, Some(source)) => match prepare_edits(&source) {
+                Ok(edits) => PreparedChange::Edits(edits),
+                Err(diagnostics) => return Ok(invalid(diagnostics)),
+            },
+            _ => {
+                return Ok(invalid(vec![error(
+                    "QDEF_CHANGE_REQUIRED",
+                    "/",
+                    "Provide exactly one definition or edit batch.",
+                    None,
+                )]))
+            }
         };
-        if !result.valid {
-            return Ok(result);
-        }
         let target = match (input.questionnaire_id, input.expected_revision) {
-            (None, None) => None,
+            (None, None) if matches!(change, PreparedChange::Replace(_)) => None,
             (Some(questionnaire_id), Some(expected_revision)) if expected_revision > 0 => {
                 Some(ReplacementTarget {
                     questionnaire_id,
@@ -656,13 +612,15 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
                 return Ok(invalid(vec![error(
                     "EXPECTED_REVISION_REQUIRED",
                     "/expectedRevision",
-                    "Replacing a draft requires its identity and current server revision.",
+                    "Changing an existing draft requires its identity and current server revision.",
                     Some("Reload the draft and use the revision returned by the server."),
                 )]))
             }
         };
         if !input.commit && target.is_none() {
-            return Ok(result);
+            if let PreparedChange::Replace(prepared) = change {
+                return Ok(prepared.result);
+            }
         }
         let idempotency_key = input
             .idempotency_key
@@ -676,16 +634,113 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
             )]));
         }
         self.access
-            .apply_validated(ValidatedDefinitionChange {
+            .apply_prepared(PreparedDefinitionChange {
                 project_id: input.project_id,
                 idempotency_key,
                 target,
                 commit: input.commit,
-                document,
-                result,
+                change,
             })
             .await
     }
+}
+
+fn parse_source(source: &str) -> Result<Value, Vec<DefinitionDiagnostic>> {
+    parse_unique_json(source).map_err(|parse_error| {
+        let parse_message = parse_error.to_string();
+        let duplicate = parse_message
+            .split_once("QDEF_DUPLICATE_KEY_AT_HEX:")
+            .and_then(|(_, payload)| payload.split_once(": "))
+            .and_then(|(encoded_path, message)| {
+                String::from_utf8(hex::decode(encoded_path).ok()?)
+                    .ok()
+                    .map(|path| (path, message))
+            });
+        vec![error(
+            if duplicate.is_some() {
+                "QDEF_DUPLICATE_KEY"
+            } else {
+                "QDEF_JSON_INVALID"
+            },
+            duplicate.as_ref().map_or("/", |(path, _)| path.as_str()),
+            duplicate.as_ref().map_or_else(
+                || format!("Definition change is not valid JSON: {parse_error}"),
+                |(_, message)| (*message).to_owned(),
+            ),
+            Some("Use valid UTF-8 JSON and give every object member a unique name."),
+        )]
+    })
+}
+
+fn prepare_document(raw: Value) -> Result<PreparedDocument, Vec<DefinitionDiagnostic>> {
+    let mut diagnostics = validate_envelope(&raw);
+    safety::inspect(&raw, "", &mut diagnostics);
+    if has_errors(&diagnostics) {
+        return Err(diagnostics);
+    }
+    let document: QDefDocument = serde_json::from_value(raw).map_err(|failure| {
+        vec![error(
+            "QDEF_SCHEMA_INVALID",
+            "/",
+            format!("Definition does not match the supported QDef schema: {failure}"),
+            Some("Use the exported .qdef.json shape and remove unknown core fields."),
+        )]
+    })?;
+    let diagnostics = validate(&document);
+    if has_errors(&diagnostics) {
+        return Err(diagnostics);
+    }
+    let (canonical, digest) = canonicalize(&document).map_err(|message| {
+        vec![error(
+            "QDEF_CANONICALIZATION_FAILED",
+            "/",
+            message,
+            Some("Remove non-finite or otherwise non-canonical JSON values."),
+        )]
+    })?;
+    let result = ApplyResult {
+        valid: true,
+        committed: false,
+        questionnaire_id: None,
+        revision: None,
+        metadata: Some(metadata(&document)),
+        canonical: Some(canonical),
+        digest: Some(digest),
+        before_digest: None,
+        diff: None,
+        diagnostics,
+    };
+    Ok(PreparedDocument { document, result })
+}
+
+fn prepare_edits(source: &str) -> Result<Vec<StableDefinitionEdit>, Vec<DefinitionDiagnostic>> {
+    let raw = parse_source(source).map_err(|mut diagnostics| {
+        for diagnostic in &mut diagnostics {
+            diagnostic.path = if diagnostic.path == "/" {
+                "/edits".into()
+            } else {
+                format!("/edits{}", diagnostic.path)
+            };
+        }
+        diagnostics
+    })?;
+    let diagnostics = edits::inspect_safety(&raw);
+    if has_errors(&diagnostics) {
+        return Err(diagnostics);
+    }
+    let edits: Vec<StableDefinitionEdit> = serde_json::from_value(raw).map_err(|failure| {
+        vec![error(
+            "EDIT_SCHEMA_INVALID",
+            "/edits",
+            format!("Edit batch does not match the supported operations: {failure}"),
+            None,
+        )]
+    })?;
+    let diagnostics = edits::validate_paths(&edits);
+    if has_errors(&diagnostics) {
+        return Err(diagnostics);
+    }
+    Ok(edits)
 }
 
 fn parse_unique_json(source: &str) -> Result<Value, serde_json::Error> {
@@ -1239,6 +1294,7 @@ fn invalid(diagnostics: Vec<DefinitionDiagnostic>) -> ApplyResult {
         canonical: None,
         digest: None,
         before_digest: None,
+        diff: None,
         metadata: None,
         diagnostics,
     }
