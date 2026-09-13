@@ -36,9 +36,13 @@ test.describe('@smoke questionnaire creation and preview', () => {
     await expect(page.getByTestId('designer-header')).toContainText(name);
 
     await designerPage.addTextQuestionFromEmptyState();
+    const questionId = await page.getByTestId('designer-question-id').inputValue();
 
     await designerPage.openPreview();
     await expect(designerPage.previewModal).toBeVisible();
+    const previewAnswer = page.getByTestId(`preview-question-${questionId}`).getByRole('textbox');
+    await previewAnswer.fill('Preview answer');
+    await expect(previewAnswer).toHaveValue('Preview answer');
     await designerPage.closePreview();
   });
 });

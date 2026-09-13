@@ -11,7 +11,6 @@ import {
   responseFor,
   startFormSession,
   waitForCard,
-  warmModules,
 } from './form-api';
 
 /**
@@ -21,14 +20,7 @@ import {
  * server-side value. Broad but shallow: the deep behaviors (blocking validation, offline
  * binaries) live in the other specs.
  *
- * The form is answered OFFLINE (after pre-warming every module chunk online), then synced
- * once on reconnect. This is deliberate: the runtime persists ~4 derived variables per
- * question and syncs eagerly, so eight questions answered online burst well past the
- * `/sync` endpoint's 10-requests/60s-per-IP limiter and answers dead-letter. Batching the
- * whole session into one reconnect sync keeps it under budget — and exercises the same
- * offline-first write path the deep specs cover. (The per-IP `/sync` limit dead-lettering
- * answers on a normal-length form filled at normal speed is itself a product concern,
- * reported alongside this lane.)
+ * Answers are captured and synchronized during ordinary online participation.
  */
 
 const QUESTIONS: FormQuestion[] = [
@@ -121,7 +113,6 @@ test.describe('@form per-type capture smoke → persisted value shapes', () => {
 
   test('every DOM question type captures a well-shaped server-side value', async ({
     page,
-    context,
     request,
     workspace,
   }) => {
@@ -132,12 +123,7 @@ test.describe('@form per-type capture smoke → persisted value shapes', () => {
     const sessionId = await startFormSession(page);
     expect(sessionId).toBeTruthy();
 
-    // The first item (single-choice) mounts online; warm the remaining module chunks so the
-    // whole form can run offline, then drop the network. All eight answers queue locally and
-    // sync in one batch on reconnect (see the file header for why).
     await waitForCard(page, 'single-choice');
-    await warmModules(page, QUESTIONS.map((q) => q.type));
-    await context.setOffline(true);
 
     // single-choice → the chosen option's value.
     let card = currentCard(page, 'single-choice');
@@ -184,10 +170,8 @@ test.describe('@form per-type capture smoke → persisted value shapes', () => {
     await drawStroke(page, card.locator('.drawing-canvas'));
     await expectAdvance(page);
 
-    // Completed entirely offline; reconnect drains the whole session in one batched sync.
     await expect(page.getByTestId('fillout-completion-screen')).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('fillout-error')).toHaveCount(0);
-    await context.setOffline(false);
 
     const responses = await pollResponses(request, sessionId, workspace, QUESTIONS.length, 45000);
     expect(responses).toHaveLength(QUESTIONS.length);

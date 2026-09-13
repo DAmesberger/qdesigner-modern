@@ -86,6 +86,16 @@ export default defineConfig({
       },
     },
     {
+      name: 'form-firefox',
+      grep: /@form/,
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'form-webkit',
+      grep: /@form/,
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
       name: 'visual-chromium',
       grep: /@visual/,
       use: {

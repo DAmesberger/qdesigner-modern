@@ -338,23 +338,5 @@ jobs:
             packages/contracts/openapi packages/contracts/src/generated
           exit 1
 
-# ── Note on the E2E lanes ────────────────────────────────────────────────────
-# The Playwright lanes (smoke / regression / fullstack / visual / reaction /
-# form) are NOT part of this PR gate. They live in e2e.yml, and every spec is
-# preserved there — nothing was deleted.
-#
-# They are not here because they have never passed, and their failures are
-# pre-existing defects in the specs/app, not CI-environment problems:
-#   - @smoke drives a hardcoded, nonexistent project id (`test-project-1`) with
-#     no auth wiring and no backend. The repo's own audit already says so:
-#     docs/decisions/PHASE_7_FINDINGS.md:34 — "The smoke PR gate is genuinely
-#     broken and has no auth wiring [...] test-project-1 is a nonexistent
-#     hardcoded id".
-#   - @fullstack (2/2 failing) provisions a workspace, publishes and opens the
-#     questionnaire by code successfully, then never reaches
-#     `fillout-completion-screen`; the designer spec times out waiting for its
-#     save response.
-# Both need test-authoring/product fixes. Blocking every PR on a lane that has
-# never once been green would just teach everyone to ignore CI — the exact
-# failure mode this workflow is meant to end. Fix the specs, then move these
-# jobs back in here (the job definitions are ready to go in e2e.yml).
+# The bounded live-stack browser gate runs separately in e2e-acceptance.yml
+# on PRs and pushes to main. Broader lanes remain on-demand in e2e.yml.

@@ -18,17 +18,13 @@ import {
  * Continue exactly like required-presence — unconditionally, no policy knob — and the
  * persisted server-side value is always literally what the participant typed and confirmed.
  *
- * The blocking behavior is entirely client-side, so it's asserted OFFLINE (the module mounts
- * online, then the network drops); the answer then syncs once on reconnect. This keeps the
- * lane on the offline-first write path (ADR 0023 D2) and off the `/sync` per-IP rate limiter,
- * which per-response online syncs across the lane's studies would otherwise trip.
+ * Answers are captured and synchronized during ordinary online participation.
  */
 test.describe('@form blocking constraint validation → server-side value', () => {
   test.describe.configure({ timeout: 120000 });
 
   test('required text-input with minLength=5 blocks until satisfied; persists the typed value', async ({
     page,
-    context,
     request,
     workspace,
   }) => {
@@ -42,7 +38,6 @@ test.describe('@form blocking constraint validation → server-side value', () =
     expect(sessionId).toBeTruthy();
 
     const card = await waitForCard(page, 'text-input');
-    await context.setOffline(true);
     const input = card.locator('.text-input');
     const message = page.getByTestId('text-input-validation-message');
 
@@ -67,7 +62,6 @@ test.describe('@form blocking constraint validation → server-side value', () =
     await clickContinue(page);
     await expect(page.getByTestId('fillout-completion-screen')).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('fillout-error')).toHaveCount(0);
-    await context.setOffline(false);
 
     const responses = await pollResponses(request, sessionId, workspace, 1, 45000);
     expect(responses).toHaveLength(1);
@@ -76,7 +70,6 @@ test.describe('@form blocking constraint validation → server-side value', () =
 
   test('number-input min=1 max=10 blocks 250 without clamping; a valid value persists as typed', async ({
     page,
-    context,
     request,
     workspace,
   }) => {
@@ -89,7 +82,6 @@ test.describe('@form blocking constraint validation → server-side value', () =
     const sessionId = await startFormSession(page);
 
     const card = await waitForCard(page, 'number-input');
-    await context.setOffline(true);
     const input = card.locator('.number-input');
     const message = page.getByTestId('number-input-validation-message');
 
@@ -113,7 +105,6 @@ test.describe('@form blocking constraint validation → server-side value', () =
 
     await clickContinue(page);
     await expect(page.getByTestId('fillout-completion-screen')).toBeVisible({ timeout: 30000 });
-    await context.setOffline(false);
 
     const responses = await pollResponses(request, sessionId, workspace, 1, 45000);
     expect(responses).toHaveLength(1);

@@ -1,0 +1,112 @@
+name: Questionnaire acceptance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: questionnaire-acceptance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgresql://qdesigner_app:qdesigner_app@localhost:15435/qdesigner_test
+      DATABASE_URL_MIGRATIONS: postgresql://qdesigner:qdesigner@localhost:15435/qdesigner_test
+      REDIS_URL: redis://localhost:16382
+      MINIO_ENDPOINT: http://localhost:19005
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: qdesigner-media
+      SMTP_HOST: localhost
+      SMTP_PORT: 11027
+      JWT_SECRET: test-secret-jwt-token-with-at-least-32-characters-long
+      JWT_REFRESH_SECRET: test-refresh-secret-token-for-refresh-tokens
+      AUTH_PROVIDER: local
+      SERVER_HOST: 127.0.0.1
+      SERVER_PORT: 4100
+      APP_HOST: localhost
+      APP_PORT: 4173
+      CORS_ORIGINS: http://localhost:4173
+      PUBLIC_APP_ORIGIN: http://localhost:4173
+      VITE_API_URL: ""
+      VITE_APP_URL: http://localhost:4173
+      VITE_WS_URL: ws://localhost:4173/api/ws
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate frontend modules
+        run: |
+          pnpm --filter @qdesigner/web paraglide:compile
+          pnpm --filter @qdesigner/web exec svelte-kit sync
+      - name: Install Chromium
+        run: pnpm --filter @qdesigner/web exec playwright install --with-deps chromium
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/db/
+            apps/server/target/
+          key: ${{ runner.os }}-acceptance-cargo-${{ hashFiles('rust-toolchain.toml', 'apps/server/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-acceptance-cargo-
+      - name: Start isolated test infrastructure
+        run: |
+          docker compose -f docker-compose.test.yml up -d --wait postgres redis minio mailpit
+          docker compose -f docker-compose.test.yml up -d minio-init
+          code=$(docker wait qdesigner-test-minio-init)
+          test "$code" = "0"
+      - name: Build and start server
+        run: |
+          cargo build --manifest-path apps/server/Cargo.toml
+          nohup ./apps/server/target/debug/qdesigner-server > server.log 2>&1 &
+          curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://localhost:4100/health
+      - name: JavaScript rejection and sync policy regressions
+        run: >-
+          pnpm --filter @qdesigner/web exec vitest run
+          tests/unit/security/no-authored-javascript.test.ts
+          ../../packages/questionnaire-core/src/logicPolicy.test.ts
+          src/lib/stores/designer/DocumentStore.logicPolicy.test.ts
+          src/lib/components/designer/RealtimePreview.logicPolicy.test.ts
+          src/lib/collaboration/YjsSchema.logicPolicy.test.ts
+          src/lib/runtime/core/QuestionnaireRuntime.validation.test.ts
+          src/lib/fillout/services/FilloutUploadSync.transient.test.ts
+          src/lib/fillout/services/FilloutUploadSync.deadletter.test.ts
+          src/lib/api/runtime.csrf-interceptor.test.ts
+      - name: Live-stack Chromium acceptance (no retries)
+        run: |
+          set -o pipefail
+          pnpm test:e2e:acceptance --reporter=line,html --output=test-results/acceptance 2>&1 | tee acceptance.log
+      - name: Collect infrastructure logs
+        if: always()
+        run: docker compose -f docker-compose.test.yml logs --no-color > infrastructure.log
+      - name: Retain acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: questionnaire-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/web/test-results/acceptance/
+            apps/web/playwright-report/
+            acceptance.log
+            server.log
+            infrastructure.log
+          retention-days: 14
+      - name: Stop test infrastructure
+        if: always()
+        run: docker compose -f docker-compose.test.yml down

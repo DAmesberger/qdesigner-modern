@@ -25,8 +25,7 @@ const ONE_MB = 1024 * 1024;
  * text/plain file rides alongside the PNG to cover the #48 MIME carve-out.
  *
  * The capture runs offline (the module mounts online, then the network drops), which both
- * pins the pending rows deterministically for assertion and batches the whole session into
- * one reconnect sync — keeping the lane off the `/sync` per-IP rate limiter.
+ * pins the pending rows for assertion and verifies deferred binary upload on reconnect.
  */
 test.describe('@form binary answers — offline-first capture, deferred upload', () => {
   test.describe.configure({ timeout: 120000 });

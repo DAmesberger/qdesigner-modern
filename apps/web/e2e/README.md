@@ -1,10 +1,12 @@
 # E2E Tests
 
-Playwright tests are split into two lanes:
+Playwright provides these lanes:
 
-- `@smoke`: fast PR gate (Chromium only)
+- `@smoke`: small authenticated designer smoke test (Chromium)
 - `@regression`: broader designer/runtime coverage (Chromium/Firefox/WebKit)
 - `@fullstack`: real backend creation + publish + participant fillout (Chromium)
+- `@reaction`: production WebGL input, persisted trials, offline recovery, media and timing validity
+- `@form`: online answers, validation, binary capture, resume and sync retry
 
 Legacy specs were moved to `e2e/legacy/` and are excluded from default runs.
 
@@ -21,12 +23,42 @@ Legacy specs were moved to `e2e/legacy/` and are excluded from default runs.
 ## Run
 
 ```bash
-pnpm test:e2e                 # smoke lane (PR default)
+pnpm test:e2e                 # smoke lane
+pnpm test:e2e:acceptance      # bounded live-stack Chromium PR gate, retries disabled
 pnpm test:e2e:smoke           # same as above
 pnpm test:e2e:regression      # regression on Chromium
 pnpm test:e2e:fullstack       # fullstack on Chromium
 pnpm test:e2e:regression:all  # regression on Chromium + Firefox + WebKit
 pnpm test:e2e:all             # all configured projects
+```
+
+## Acceptance gate and startup
+
+The bounded acceptance command runs UI-authored form and Standard RT journeys,
+exact persisted results, recovery/deduplication, concurrent participants,
+Retry-After, JavaScript rejection and the form/reaction suites. It provisions
+synthetic studies through the real API, with separate author/participant contexts.
+Ordinary forms stay online. There are no inter-test rate-window delays.
+
+[The PR workflow](../../../.github/workflows/e2e-acceptance.yml) is the reproducible
+startup recipe: dedicated test Compose services, migration/user database
+connections, Rust server on 4100, Vite on 4173, Chromium and frontend code
+generation. For a local run, use those test environment values and start the same
+services/server, then run `pnpm test:e2e:acceptance` from the repository root.
+Playwright starts Vite if needed. Keep `VITE_API_URL` empty to use the same-origin
+proxy required by CSP. Do not regenerate Paraglide or build while browser tests
+are using the Vite server.
+
+The PR job retains traces, failure screenshots/video, the HTML report, console
+output and server/infrastructure logs for 14 days. The broader on-demand workflow
+is separate. [The acceptance report](../../../docs/end-to-end-acceptance-report.md)
+records actual local/hosted evidence and limitations. Browser input tests do not
+certify physical reaction-time accuracy.
+
+For ordinary online Firefox/WebKit checks:
+
+```bash
+pnpm --filter @qdesigner/web exec playwright test e2e/form/capture-smoke.form.spec.ts e2e/form/validation.form.spec.ts --project=form-firefox --project=form-webkit --workers=1 --retries=0
 ```
 
 ## Selector Contract
@@ -51,7 +83,7 @@ Core selectors used by smoke/regression include:
 - `questionnaire-name-input`
 - `questionnaire-create-confirm`
 - `designer-root`
-- `designer-empty-add-text-question`
+- `designer-empty-state`
 - `designer-preview-button`
 - `designer-preview-modal`
 - `preview-question-list`
