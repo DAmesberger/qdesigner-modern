@@ -30,6 +30,7 @@ use crate::error::ApiError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuditAction {
     QuestionnaireDefinitionImported,
+    QuestionnaireDefinitionReplaced,
     MemberAdded,
     MemberRoleChanged,
     MemberRemoved,
@@ -100,6 +101,7 @@ impl AuditAction {
     pub fn as_str(&self) -> &'static str {
         match self {
             AuditAction::QuestionnaireDefinitionImported => "questionnaire.definition_imported",
+            AuditAction::QuestionnaireDefinitionReplaced => "questionnaire.definition_replaced",
             AuditAction::MemberAdded => "member.added",
             AuditAction::MemberRoleChanged => "member.role_changed",
             AuditAction::MemberRemoved => "member.removed",

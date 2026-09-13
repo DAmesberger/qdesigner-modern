@@ -15,9 +15,10 @@ use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
 use crate::questionnaire_definition::{
-    ApplyInput as DefinitionApplyInput, ApplyResult as DefinitionApplyResult, DefinitionArtifact,
-    DefinitionReadFailure, DefinitionValidationFailure, PostgresDefinitionAccess,
-    QuestionnaireDefinition, ReadInput as DefinitionReadInput,
+    snapshot_questionnaire_version, ApplyInput as DefinitionApplyInput,
+    ApplyResult as DefinitionApplyResult, DefinitionArtifact, DefinitionReadFailure,
+    DefinitionValidationFailure, PostgresDefinitionAccess, QuestionnaireDefinition,
+    ReadInput as DefinitionReadInput,
 };
 use crate::rbac::models::Permission;
 use crate::state::AppState;
@@ -26,6 +27,7 @@ use crate::state::AppState;
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Questionnaire {
+    pub collaboration_epoch: i32,
     pub id: Uuid,
     pub project_id: Uuid,
     pub name: String,
@@ -74,6 +76,8 @@ pub struct CreateQuestionnaireRequest {
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateQuestionnaireRequest {
+    /// Generation observed when loading the designer. Old generations cannot save after replacement.
+    pub expected_collaboration_epoch: Option<i32>,
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
     pub description: Option<String>,
@@ -115,6 +119,8 @@ pub struct ApplyQuestionnaireDefinitionRequest {
     #[serde(default)]
     pub commit: bool,
     pub idempotency_key: Option<String>,
+    pub questionnaire_id: Option<Uuid>,
+    pub expected_revision: Option<i32>,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
@@ -225,7 +231,7 @@ pub async fn list_questionnaires(
             r#"
             SELECT id, project_id, name, description, version, content, status,
                    settings, created_by, created_at, updated_at, published_at,
-                   version_major, version_minor, version_patch
+                   version_major, version_minor, version_patch, collaboration_epoch
             FROM questionnaire_definitions
             WHERE project_id = $1 AND status = $2 AND deleted_at IS NULL
             ORDER BY updated_at DESC
@@ -243,7 +249,7 @@ pub async fn list_questionnaires(
             r#"
             SELECT id, project_id, name, description, version, content, status,
                    settings, created_by, created_at, updated_at, published_at,
-                   version_major, version_minor, version_patch
+                   version_major, version_minor, version_patch, collaboration_epoch
             FROM questionnaire_definitions
             WHERE project_id = $1 AND deleted_at IS NULL
             ORDER BY updated_at DESC
@@ -310,7 +316,7 @@ pub async fn create_questionnaire(
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, project_id, name, description, version, content, status,
                   settings, created_by, created_at, updated_at, published_at,
-                  version_major, version_minor, version_patch
+                  version_major, version_minor, version_patch, collaboration_epoch
         "#,
     )
     .bind(project_id)
@@ -369,7 +375,7 @@ pub async fn get_questionnaire(
         r#"
         SELECT id, project_id, name, description, version, content, status,
                settings, created_by, created_at, updated_at, published_at,
-               version_major, version_minor, version_patch
+               version_major, version_minor, version_patch, collaboration_epoch
         FROM questionnaire_definitions
         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
         "#,
@@ -461,6 +467,8 @@ pub async fn dry_run_definition(
                 definition: body.definition,
                 commit: false,
                 idempotency_key: None,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await?,
     ))
@@ -496,12 +504,17 @@ pub async fn apply_definition(
             definition: body.definition,
             commit: body.commit,
             idempotency_key: body.idempotency_key,
+            questionnaire_id: body.questionnaire_id,
+            expected_revision: body.expected_revision,
         })
         .await?;
     let status = if result.diagnostics.iter().any(|d| {
         matches!(
             d.code.as_str(),
-            "IDEMPOTENCY_CONFLICT" | "QDEF_NAME_CONFLICT"
+            "IDEMPOTENCY_CONFLICT"
+                | "QDEF_NAME_CONFLICT"
+                | "REVISION_CONFLICT"
+                | "QDEF_TARGET_NOT_DRAFT"
         )
     }) {
         axum::http::StatusCode::CONFLICT
@@ -553,6 +566,19 @@ pub async fn update_questionnaire(
     )
     .await?;
 
+    // Serialize the generation check with replacement before any snapshot or
+    // content write. A stale autosave cannot restore the pre-import projection.
+    let current_epoch: i32 = sqlx::query_scalar(
+        "SELECT collaboration_epoch FROM questionnaire_definitions WHERE id=$1 AND project_id=$2 AND deleted_at IS NULL FOR UPDATE"
+    ).bind(path.qid).bind(path.id).fetch_optional(&mut **tx).await?
+        .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+    if body.expected_collaboration_epoch.unwrap_or(0) != current_epoch {
+        return Err(ApiError::Conflict(
+            "This questionnaire was replaced. Reload the current draft before saving your changes."
+                .into(),
+        ));
+    }
+
     // Snapshot current state into questionnaire_versions before updating
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
 
@@ -566,7 +592,7 @@ pub async fn update_questionnaire(
             WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
             RETURNING id, project_id, name, description, version, content, status,
                       settings, created_by, created_at, updated_at, published_at,
-                      version_major, version_minor, version_patch
+                      version_major, version_minor, version_patch, collaboration_epoch
             "#,
         )
         .bind(path.qid)
@@ -639,7 +665,7 @@ pub async fn update_questionnaire(
         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
         RETURNING id, project_id, name, description, version, content, status,
                   settings, created_by, created_at, updated_at, published_at,
-                  version_major, version_minor, version_patch"#,
+                  version_major, version_minor, version_patch, collaboration_epoch"#,
         parts.join(", ")
     );
 
@@ -716,7 +742,7 @@ pub async fn publish_questionnaire(
         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
         RETURNING id, project_id, name, description, version, content, status,
                   settings, created_by, created_at, updated_at, published_at,
-                  version_major, version_minor, version_patch
+                  version_major, version_minor, version_patch, collaboration_epoch
         "#,
     )
     .bind(path.qid)
@@ -788,7 +814,7 @@ pub async fn bump_version(
                 WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
                 RETURNING id, project_id, name, description, version, content, status,
                           settings, created_by, created_at, updated_at, published_at,
-                          version_major, version_minor, version_patch
+                          version_major, version_minor, version_patch, collaboration_epoch
                 "#,
             )
             .bind(path.qid)
@@ -807,7 +833,7 @@ pub async fn bump_version(
                 WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
                 RETURNING id, project_id, name, description, version, content, status,
                           settings, created_by, created_at, updated_at, published_at,
-                          version_major, version_minor, version_patch
+                          version_major, version_minor, version_patch, collaboration_epoch
                 "#,
             )
             .bind(path.qid)
@@ -825,7 +851,7 @@ pub async fn bump_version(
                 WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
                 RETURNING id, project_id, name, description, version, content, status,
                           settings, created_by, created_at, updated_at, published_at,
-                          version_major, version_minor, version_patch
+                          version_major, version_minor, version_patch, collaboration_epoch
                 "#,
             )
             .bind(path.qid)
@@ -1249,6 +1275,7 @@ fn render_export_csv(rows: &[ExportRow], spss_names: bool) -> String {
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct QuestionnaireVersion {
+    pub settings: Option<serde_json::Value>,
     pub id: Uuid,
     pub questionnaire_id: Uuid,
     pub version: i32,
@@ -1317,7 +1344,7 @@ pub async fn list_versions(
 
     let versions = sqlx::query_as::<_, QuestionnaireVersion>(
         r#"
-        SELECT id, questionnaire_id, version, content, title, description,
+        SELECT id, questionnaire_id, version, content, title, description, settings,
                created_at, created_by,
                version_major, version_minor, version_patch
         FROM questionnaire_versions
@@ -1333,54 +1360,6 @@ pub async fn list_versions(
     .await?;
 
     Ok(Json(versions))
-}
-
-/// Snapshot the current questionnaire state into the versions table.
-///
-/// Takes an exclusive row lock on the questionnaire *before* reading its
-/// version so that concurrent save/publish/bump requests are serialized on
-/// this questionnaire — without the lock, two transactions could both read the
-/// same `version` for their snapshot before either increments it and then both
-/// try to INSERT the same `(questionnaire_id, version)` pair, colliding on the
-/// `idx_questionnaire_versions_identity` unique index (HTTP 500).
-///
-/// The INSERT is also idempotent (`ON CONFLICT ... DO NOTHING`): publish does
-/// not bump `version`, so re-publishing — or any save that doesn't advance the
-/// version — must not create a duplicate snapshot row. `DO NOTHING` (rather
-/// than `DO UPDATE`) preserves the first snapshot captured for a given version
-/// number, which is the published/historical content for that version.
-async fn snapshot_questionnaire_version(
-    conn: &mut sqlx::PgConnection,
-    questionnaire_id: Uuid,
-    user_id: Uuid,
-) -> Result<(), ApiError> {
-    // Serialize concurrent version mutations on this questionnaire.
-    sqlx::query(
-        r#"
-        SELECT 1 FROM questionnaire_definitions
-        WHERE id = $1 AND deleted_at IS NULL
-        FOR UPDATE
-        "#,
-    )
-    .bind(questionnaire_id)
-    .execute(&mut *conn)
-    .await?;
-
-    sqlx::query(
-        r#"
-        INSERT INTO questionnaire_versions (questionnaire_id, version, content, title, description, created_by, version_major, version_minor, version_patch)
-        SELECT id, version, content, name, description, $2, version_major, version_minor, version_patch
-        FROM questionnaire_definitions
-        WHERE id = $1 AND deleted_at IS NULL
-        ON CONFLICT (questionnaire_id, version) DO NOTHING
-        "#,
-    )
-    .bind(questionnaire_id)
-    .bind(user_id)
-    .execute(&mut *conn)
-    .await?;
-
-    Ok(())
 }
 
 fn extract_questionnaire_variable_definitions(content: &Value) -> Vec<(String, Value)> {

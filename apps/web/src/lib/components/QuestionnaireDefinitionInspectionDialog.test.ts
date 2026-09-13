@@ -68,7 +68,7 @@ describe('QuestionnaireDefinitionInspectionDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Create Draft' }));
     await waitFor(() => expect(oncreated).toHaveBeenCalledWith('new-draft'));
     const [first, retry] = vi.mocked(api.questionnaires.applyDefinition).mock.calls;
-    expect(first).toEqual(['project-1', '{}', expect.any(String)]);
+    expect(first).toEqual(['project-1', '{}', expect.any(String), undefined]);
     expect(first![2]).not.toBe('');
     expect(retry).toEqual(first);
   });

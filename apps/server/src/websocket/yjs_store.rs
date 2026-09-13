@@ -36,15 +36,18 @@ const PERSIST_DEBOUNCE: Duration = Duration::from_secs(2);
 /// An active collaborative editing session for a single questionnaire.
 pub struct YjsRoom {
     pub doc: Doc,
+    /// Installation generation; absent rooms must never be served or persisted.
+    pub epoch: Option<i32>,
     /// When the binary state was last written to `yjs_state`.
     pub last_persisted: Instant,
 }
 
 impl YjsRoom {
     /// Wrap an already-seeded (or already-loaded) document.
-    fn from_doc(doc: Doc) -> Self {
+    fn from_doc(doc: Doc, epoch: Option<i32>) -> Self {
         Self {
             doc,
+            epoch,
             last_persisted: Instant::now(),
         }
     }
@@ -114,28 +117,35 @@ impl YjsStore {
     /// document is loaded from the persisted `yjs_state`, or seeded from `content`
     /// (once) if no binary state exists yet.
     pub async fn get_or_create_room(&self, questionnaire_id: Uuid) -> Arc<Mutex<YjsRoom>> {
-        // Fast path: read lock.
-        {
-            let rooms = self.rooms.read().await;
-            if let Some(room) = rooms.get(&questionnaire_id) {
-                return room.clone();
+        // Consult durable generation even for cached rooms: another server may
+        // have replaced this questionnaire since the last frame.
+        let epoch = sqlx::query_scalar::<_, i32>(
+            "SELECT collaboration_epoch FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(questionnaire_id)
+        .fetch_optional(&self.pool)
+        .await
+        .ok()
+        .flatten();
+        let cached = self.rooms.read().await.get(&questionnaire_id).cloned();
+        if let Some(room) = cached {
+            if epoch.is_some() && room.lock().await.epoch == epoch {
+                return room;
             }
         }
-
-        // Slow path: hold the write lock across creation so exactly one room is
-        // built per questionnaire per process. Room creation is rare (once per
-        // questionnaire per server lifetime), so serializing it is acceptable.
+        // Database work must not hold the cache lock: a normal HTTP save can
+        // hold the definition row lock while checking for an active room.
+        let (doc, epoch) = self.load_or_seed_doc(questionnaire_id).await;
+        let room = Arc::new(Mutex::new(YjsRoom::from_doc(doc, epoch)));
         let mut rooms = self.rooms.write().await;
-        if let Some(room) = rooms.get(&questionnaire_id) {
-            return room.clone();
+        if let Some(existing) = rooms.get(&questionnaire_id) {
+            if epoch.is_some() && existing.lock().await.epoch >= epoch {
+                return existing.clone();
+            }
         }
-        let (doc, authoritative) = self.load_or_seed_doc(questionnaire_id).await;
-        let room = Arc::new(Mutex::new(YjsRoom::from_doc(doc)));
-        // Only cache the room once we hold authoritative state. If seeding could not
-        // be persisted (transient DB error) or the persisted bytes were undecodable,
-        // hand back an empty, UNcached room so the next open re-attempts rather than
-        // pinning a divergent/unpersisted identity for the whole process lifetime.
-        if authoritative {
+        // Never flush an obsolete room into its replacement, nor cache a
+        // document whose authoritative state could not be loaded.
+        if epoch.is_some() {
             rooms.insert(questionnaire_id, room.clone());
         }
         room
@@ -145,16 +155,16 @@ impl YjsStore {
     /// binary; otherwise seed from `content` and persist it under an atomic CAS so
     /// that at most one seeder ever wins (across processes / concurrent opens).
     ///
-    /// Returns `(doc, authoritative)`. `authoritative == false` means we could not
+    /// Returns `(doc, epoch)`. A missing epoch means we could not
     /// establish persisted/adopted state (transient DB error, undecodable bytes, or
     /// a missing row); the caller must NOT cache such a room, and must never serve
     /// our un-persisted local seed — its CRDT identity would diverge from the real
     /// authoritative state and could re-introduce the page duplication.
-    async fn load_or_seed_doc(&self, questionnaire_id: Uuid) -> (Doc, bool) {
+    async fn load_or_seed_doc(&self, questionnaire_id: Uuid) -> (Doc, Option<i32>) {
         let doc = Doc::new();
 
-        let row: Option<(Option<Vec<u8>>, Option<Value>)> = sqlx::query_as(
-            "SELECT yjs_state, content FROM questionnaire_definitions \
+        let row: Option<(Option<Vec<u8>>, Option<Value>, i32)> = sqlx::query_as(
+            "SELECT yjs_state, content, collaboration_epoch FROM questionnaire_definitions \
              WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(questionnaire_id)
@@ -164,19 +174,19 @@ impl YjsStore {
 
         match row {
             // Authoritative binary already exists — load it verbatim.
-            Some((Some(state), _)) => match apply_update_to(&doc, &state) {
-                Ok(()) => (doc, true),
+            Some((Some(state), _, epoch)) => match apply_update_to(&doc, &state) {
+                Ok(()) => (doc, Some(epoch)),
                 Err(e) => {
                     // Undecodable persisted bytes: do NOT re-seed from the (possibly
                     // stale) content here and do NOT cache — serve empty so a later
                     // open retries, and so no edit ever overwrites the stored bytes.
                     tracing::warn!(%questionnaire_id, "failed to apply persisted yjs_state: {e}");
-                    (Doc::new(), false)
+                    (Doc::new(), None)
                 }
             },
             // Never collaborated yet — seed once from the content projection under an
             // atomic election so at most one seeder ever wins.
-            Some((None, Some(content))) => {
+            Some((None, Some(content), epoch)) => {
                 seed_doc_from_content(&doc, &content);
                 let bytes = encode_state(&doc);
 
@@ -187,38 +197,39 @@ impl YjsStore {
                 let won = matches!(
                     sqlx::query(
                         "UPDATE questionnaire_definitions SET yjs_state = $1 \
-                         WHERE id = $2 AND yjs_state IS NULL",
+                         WHERE id = $2 AND yjs_state IS NULL AND collaboration_epoch = $3",
                     )
                     .bind(&bytes)
                     .bind(questionnaire_id)
+                    .bind(epoch)
                     .execute(&self.pool)
                     .await,
                     Ok(ref res) if res.rows_affected() >= 1
                 );
 
                 if won {
-                    (doc, true)
+                    (doc, Some(epoch))
                 } else {
                     match self.adopt_persisted(questionnaire_id).await {
-                        Some(adopted) => (adopted, true),
-                        None => (Doc::new(), false),
+                        Some((adopted, epoch)) => (adopted, Some(epoch)),
+                        None => (Doc::new(), None),
                     }
                 }
             }
             // Row exists with neither state nor content — a genuinely empty
             // questionnaire. Start empty + authoritative; the first edit persists.
-            Some((None, None)) => (doc, true),
+            Some((None, None, epoch)) => (doc, Some(epoch)),
             // Row missing (deleted / not found): empty, uncached.
-            None => (doc, false),
+            None => (doc, None),
         }
     }
 
     /// Read the persisted authoritative state, retrying briefly for the race where a
     /// concurrent winner's `UPDATE` has not yet committed.
-    async fn adopt_persisted(&self, questionnaire_id: Uuid) -> Option<Doc> {
+    async fn adopt_persisted(&self, questionnaire_id: Uuid) -> Option<(Doc, i32)> {
         for attempt in 0..3 {
-            if let Ok(Some((Some(state),))) = sqlx::query_as::<_, (Option<Vec<u8>>,)>(
-                "SELECT yjs_state FROM questionnaire_definitions WHERE id = $1",
+            if let Ok(Some((Some(state), epoch))) = sqlx::query_as::<_, (Option<Vec<u8>>, i32)>(
+                "SELECT yjs_state, collaboration_epoch FROM questionnaire_definitions WHERE id = $1",
             )
             .bind(questionnaire_id)
             .fetch_optional(&self.pool)
@@ -226,7 +237,7 @@ impl YjsStore {
             {
                 let adopted = Doc::new();
                 if apply_update_to(&adopted, &state).is_ok() {
-                    return Some(adopted);
+                    return Some((adopted, epoch));
                 }
             }
             if attempt < 2 {
@@ -238,13 +249,14 @@ impl YjsStore {
 
     /// Persist a room's current binary state to `yjs_state` (called debounced from
     /// the relay). Best-effort: failures are logged, not surfaced to clients.
-    pub async fn persist(&self, questionnaire_id: Uuid, state: &[u8]) {
+    pub async fn persist(&self, questionnaire_id: Uuid, epoch: i32, state: &[u8]) {
         if let Err(e) = sqlx::query(
             "UPDATE questionnaire_definitions SET yjs_state = $1 \
-             WHERE id = $2 AND deleted_at IS NULL",
+             WHERE id = $2 AND deleted_at IS NULL AND collaboration_epoch = $3",
         )
         .bind(state)
         .bind(questionnaire_id)
+        .bind(epoch)
         .execute(&self.pool)
         .await
         {
@@ -294,10 +306,12 @@ impl YjsStore {
         let Some(room) = self.rooms.write().await.remove(&questionnaire_id) else {
             return;
         };
-        let bytes = {
+        let (bytes, epoch) = {
             let room = room.lock().await;
-            room.encode_state_as_update()
+            (room.encode_state_as_update(), room.epoch)
         };
-        self.persist(questionnaire_id, &bytes).await;
+        if let Some(epoch) = epoch {
+            self.persist(questionnaire_id, epoch, &bytes).await;
+        }
     }
 }

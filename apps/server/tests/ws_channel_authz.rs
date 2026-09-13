@@ -70,7 +70,7 @@ fn hostile_update_frame() -> Vec<u8> {
         .transact()
         .encode_state_as_update_v1(&StateVector::default());
 
-    let mut frame = vec![MSG_SYNC, MSG_SYNC_UPDATE];
+    let mut frame = vec![2, 0, MSG_SYNC, MSG_SYNC_UPDATE];
     encode_var_uint(update.len(), &mut frame);
     frame.extend_from_slice(&update);
     frame

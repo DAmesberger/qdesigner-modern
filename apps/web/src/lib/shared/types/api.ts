@@ -69,6 +69,7 @@ export interface Project {
 
 // Questionnaire types
 export interface QuestionnaireDefinition {
+  collaboration_epoch?: number;
   id: string;
   projectId: string;
   name: string;

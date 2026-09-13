@@ -18,12 +18,16 @@ import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
 
 /** Message types for binary frames. */
+const MSG_GENERATION = 2;
 const MSG_SYNC = 0;
 const MSG_AWARENESS = 1;
 
 export interface YjsProviderOptions {
   /** The questionnaire ID this doc belongs to. */
   questionnaireId: string;
+  /** Loaded from the HTTP definition; fixed for this document lifetime. */
+  collaborationEpoch?: number;
+  onReplaced?: () => void;
   /** WebSocket URL override (defaults to same-origin ws/wss at /api/ws). */
   wsUrl?: string;
 }
@@ -38,6 +42,10 @@ export class YjsProvider {
   private readonly maxReconnectAttempts = 10;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
+  private replaced = false;
+  private generationTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly collaborationEpoch: number;
+  private readonly onReplaced?: () => void;
   private connectionListeners = new Set<(connected: boolean) => void>();
   private syncedListeners = new Set<() => void>();
 
@@ -48,6 +56,8 @@ export class YjsProvider {
     this.doc = doc;
     this.awareness = new awarenessProtocol.Awareness(doc);
     this.questionnaireId = options.questionnaireId;
+    this.collaborationEpoch = options.collaborationEpoch ?? 0;
+    this.onReplaced = options.onReplaced;
     this.wsUrl =
       options.wsUrl ||
       (typeof window !== 'undefined'
@@ -74,6 +84,7 @@ export class YjsProvider {
   }
 
   connect(): void {
+    if (this.replaced) return;
     this.destroyed = false;
     this.reconnectAttempts = 0;
     this.doConnect();
@@ -81,6 +92,7 @@ export class YjsProvider {
 
   disconnect(): void {
     this.destroyed = true;
+    this.clearGenerationTimer();
     this.clearReconnectTimer();
     if (this.ws) {
       this.ws.close(1000, 'Provider disconnect');
@@ -143,12 +155,20 @@ export class YjsProvider {
 
       // Initiate sync step 1.
       this.sendSyncStep1();
+      // Idle collaborators must also discover a replacement on another server.
+      this.clearGenerationTimer();
+      this.generationTimer = setInterval(() => this.sendSyncStep1(), 2000);
     };
 
     this.ws.onclose = (event) => {
+      this.clearGenerationTimer();
       this.synced = false;
       this.notifyConnection(false);
-      if (!this.destroyed && event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (
+        !this.destroyed &&
+        event.code !== 1000 &&
+        this.reconnectAttempts < this.maxReconnectAttempts
+      ) {
         this.scheduleReconnect();
       }
     };
@@ -177,7 +197,18 @@ export class YjsProvider {
   }
 
   private handleBinaryMessage(data: Uint8Array): void {
+    if (this.destroyed || data.length < 2) return;
     const decoder = decoding.createDecoder(data);
+    if (decoding.readVarUint(decoder) !== MSG_GENERATION) return;
+    const epoch = decoding.readVarUint(decoder);
+    if (epoch > this.collaborationEpoch) {
+      this.replaced = true;
+      this.disconnect();
+      this.onReplaced?.();
+      return;
+    }
+    // A late broadcast from an obsolete room can never enter the new document.
+    if (epoch !== this.collaborationEpoch || !decoding.hasContent(decoder)) return;
     const msgType = decoding.readVarUint(decoder);
 
     switch (msgType) {
@@ -201,7 +232,7 @@ export class YjsProvider {
         awarenessProtocol.applyAwarenessUpdate(
           this.awareness,
           decoding.readVarUint8Array(decoder),
-          this,
+          this
         );
         break;
       }
@@ -222,14 +253,14 @@ export class YjsProvider {
 
   private onAwarenessUpdate = (
     { added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
-    _origin: unknown,
+    _origin: unknown
   ): void => {
     const changedClients = added.concat(updated, removed);
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, MSG_AWARENESS);
     encoding.writeVarUint8Array(
       encoder,
-      awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
+      awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients)
     );
     this.sendBinary(encoding.toUint8Array(encoder));
   };
@@ -240,7 +271,11 @@ export class YjsProvider {
 
   private sendBinary(data: Uint8Array): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
+      const envelope = encoding.createEncoder();
+      encoding.writeVarUint(envelope, MSG_GENERATION);
+      encoding.writeVarUint(envelope, this.collaborationEpoch);
+      encoding.writeUint8Array(envelope, data);
+      this.ws.send(encoding.toUint8Array(envelope));
     }
   }
 
@@ -259,6 +294,11 @@ export class YjsProvider {
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30_000);
     this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => this.doConnect(), delay);
+  }
+
+  private clearGenerationTimer(): void {
+    if (this.generationTimer) clearInterval(this.generationTimer);
+    this.generationTimer = null;
   }
 
   private clearReconnectTimer(): void {

@@ -6,6 +6,8 @@
 mod persistence;
 mod safety;
 
+pub(crate) use persistence::snapshot_questionnaire_version;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -50,16 +52,27 @@ pub trait DefinitionAccess {
         questionnaire_id: Uuid,
     ) -> Result<Option<StoredQuestionnaire>, ApiError>;
 
-    async fn create(&mut self, input: CreateDefinition) -> Result<ApplyResult, ApiError>;
+    async fn apply_validated(
+        &mut self,
+        input: ValidatedDefinitionChange,
+    ) -> Result<ApplyResult, ApiError>;
 }
 
-/// A validated creation command. Only the Definition Module constructs it;
-/// repository adapters cannot substitute unvalidated input for its document.
-pub struct CreateDefinition {
+/// A validated definition change. Only the Definition Module constructs it;
+/// Repository adapters cannot substitute unvalidated input for its document.
+pub struct ValidatedDefinitionChange {
     project_id: Uuid,
-    idempotency_key: String,
+    idempotency_key: Option<String>,
+    target: Option<ReplacementTarget>,
+    commit: bool,
     document: QDefDocument,
     result: ApplyResult,
+}
+
+#[derive(Clone, Copy)]
+struct ReplacementTarget {
+    questionnaire_id: Uuid,
+    expected_revision: i32,
 }
 
 pub struct PostgresDefinitionAccess<'a> {
@@ -79,8 +92,11 @@ impl<'a> PostgresDefinitionAccess<'a> {
 }
 
 impl DefinitionAccess for PostgresDefinitionAccess<'_> {
-    async fn create(&mut self, input: CreateDefinition) -> Result<ApplyResult, ApiError> {
-        persistence::create(self.connection, self.user_id, input).await
+    async fn apply_validated(
+        &mut self,
+        input: ValidatedDefinitionChange,
+    ) -> Result<ApplyResult, ApiError> {
+        persistence::apply_validated(self.connection, self.user_id, input).await
     }
 
     async fn authorize(
@@ -176,6 +192,8 @@ pub struct ApplyInput {
     pub definition: String,
     pub commit: bool,
     pub idempotency_key: Option<String>,
+    pub questionnaire_id: Option<Uuid>,
+    pub expected_revision: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -202,6 +220,8 @@ pub struct ApplyResult {
     pub revision: Option<i32>,
     pub canonical: Option<String>,
     pub digest: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before_digest: Option<String>,
     pub metadata: Option<DefinitionMetadata>,
     pub diagnostics: Vec<DefinitionDiagnostic>,
 }
@@ -609,6 +629,7 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
                 metadata: Some(metadata(&document)),
                 canonical: Some(canonical),
                 digest: Some(digest),
+                before_digest: None,
                 diagnostics,
             },
             Err(message) => invalid(vec![error(
@@ -618,24 +639,46 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
                 Some("Remove non-finite or otherwise non-canonical JSON values."),
             )]),
         };
-        if !input.commit || !result.valid {
+        if !result.valid {
             return Ok(result);
         }
-        let Some(idempotency_key) = input
+        let target = match (input.questionnaire_id, input.expected_revision) {
+            (None, None) => None,
+            (Some(questionnaire_id), Some(expected_revision)) if expected_revision > 0 => {
+                Some(ReplacementTarget {
+                    questionnaire_id,
+                    expected_revision,
+                })
+            }
+            _ => {
+                return Ok(invalid(vec![error(
+                    "EXPECTED_REVISION_REQUIRED",
+                    "/expectedRevision",
+                    "Replacing a draft requires its identity and current server revision.",
+                    Some("Reload the draft and use the revision returned by the server."),
+                )]))
+            }
+        };
+        if !input.commit && target.is_none() {
+            return Ok(result);
+        }
+        let idempotency_key = input
             .idempotency_key
-            .filter(|key| !key.trim().is_empty() && key.len() <= 128)
-        else {
+            .filter(|key| !key.trim().is_empty() && key.len() <= 128);
+        if input.commit && idempotency_key.is_none() {
             return Ok(invalid(vec![error(
                 "IDEMPOTENCY_KEY_REQUIRED",
                 "/idempotencyKey",
-                "Creating a draft requires a nonempty idempotency key of at most 128 bytes.",
-                Some("Generate a key for this import and reuse it when retrying the same request."),
+                "Changing a draft requires a nonempty idempotency key of at most 128 bytes.",
+                Some("Generate a key for this change and reuse it when retrying the same request."),
             )]));
-        };
+        }
         self.access
-            .create(CreateDefinition {
+            .apply_validated(ValidatedDefinitionChange {
                 project_id: input.project_id,
                 idempotency_key,
+                target,
+                commit: input.commit,
                 document,
                 result,
             })
@@ -1193,6 +1236,7 @@ fn invalid(diagnostics: Vec<DefinitionDiagnostic>) -> ApplyResult {
         revision: None,
         canonical: None,
         digest: None,
+        before_digest: None,
         metadata: None,
         diagnostics,
     }

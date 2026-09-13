@@ -1,7 +1,7 @@
 use qdesigner_server::error::ApiError;
 use qdesigner_server::questionnaire_definition::{
-    ApplyInput, ApplyResult, CreateDefinition, DefinitionAccess, DefinitionCapability,
-    DefinitionReadFailure, QuestionnaireDefinition, ReadInput, StoredQuestionnaire,
+    ApplyInput, ApplyResult, DefinitionAccess, DefinitionCapability, DefinitionReadFailure,
+    QuestionnaireDefinition, ReadInput, StoredQuestionnaire, ValidatedDefinitionChange,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -14,7 +14,10 @@ struct FakeAccess {
 }
 
 impl DefinitionAccess for FakeAccess {
-    async fn create(&mut self, _input: CreateDefinition) -> Result<ApplyResult, ApiError> {
+    async fn apply_validated(
+        &mut self,
+        _input: ValidatedDefinitionChange,
+    ) -> Result<ApplyResult, ApiError> {
         panic!("Validation-only contract must not reach persistence");
     }
     async fn authorize(
@@ -54,6 +57,8 @@ async fn a_commit_requires_a_nonempty_bounded_idempotency_key() {
                 definition: minimal_definition().to_string(),
                 commit: true,
                 idempotency_key: key,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await
             .unwrap();
@@ -93,6 +98,8 @@ async fn invalid_questionnaire_metadata_is_rejected_equally_before_inspection_an
                     definition: definition.to_string(),
                     commit,
                     idempotency_key: Some("invalid-metadata".into()),
+                    questionnaire_id: None,
+                    expected_revision: None,
                 })
                 .await
                 .unwrap();
@@ -205,6 +212,8 @@ async fn text_only_qdef_round_trips_through_the_questionnaire_definition_interfa
             definition: exported.canonical.clone(),
             commit: false,
             idempotency_key: None,
+            questionnaire_id: None,
+            expected_revision: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -299,6 +308,8 @@ async fn unsupported_qdef_versions_return_stable_structured_diagnostics() {
             .to_string(),
             commit: false,
             idempotency_key: None,
+            questionnaire_id: None,
+            expected_revision: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -324,6 +335,8 @@ async fn malformed_json_is_reported_by_the_questionnaire_definition_interface() 
             definition: "{ definitely not JSON".into(),
             commit: false,
             idempotency_key: None,
+            questionnaire_id: None,
+            expected_revision: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -349,6 +362,8 @@ async fn duplicate_raw_json_registry_keys_are_rejected_before_deserialization() 
             .into(),
             commit: false,
             idempotency_key: None,
+            questionnaire_id: None,
+            expected_revision: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -505,6 +520,8 @@ async fn executable_payloads_are_rejected_at_the_inspection_boundary() {
                 definition: document.to_string(),
                 commit: false,
                 idempotency_key: None,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await
             .unwrap();
@@ -537,6 +554,8 @@ async fn unsafe_content_has_the_same_actionable_findings_for_inspection_and_comm
                 definition: document.to_string(),
                 commit,
                 idempotency_key: None,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await
             .unwrap();
@@ -595,6 +614,8 @@ async fn executable_aliases_cannot_hide_in_nested_module_configuration() {
                 definition: document.to_string(),
                 commit: false,
                 idempotency_key: None,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await
             .unwrap();
@@ -633,6 +654,8 @@ async fn retired_lifecycle_names_cannot_be_imported_as_nested_configuration() {
                     definition: definition.to_string(),
                     commit,
                     idempotency_key: Some("retired-hook".into()),
+                    questionnaire_id: None,
+                    expected_revision: None,
                 })
                 .await
                 .unwrap();
@@ -668,6 +691,8 @@ async fn stable_question_identifiers_are_data_not_executable_field_names() {
                 definition: document.to_string(),
                 commit: false,
                 idempotency_key: None,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await
             .unwrap();
@@ -706,6 +731,8 @@ async fn unsupported_tracer_capabilities_do_not_receive_a_valid_digest() {
                 definition: document.to_string(),
                 commit: false,
                 idempotency_key: None,
+                questionnaire_id: None,
+                expected_revision: None,
             })
             .await
             .unwrap();
@@ -730,6 +757,8 @@ async fn passive_html_and_literal_script_discussion_remain_portable_text() {
             definition: document.to_string(),
             commit: false,
             idempotency_key: None,
+            questionnaire_id: None,
+            expected_revision: None,
         })
         .await
         .unwrap();
@@ -769,6 +798,8 @@ async fn javascript_language_markers_and_executable_ast_nodes_are_not_opaque_con
                     definition: definition.to_string(),
                     commit,
                     idempotency_key: Some("unsafe-ast".into()),
+                    questionnaire_id: None,
+                    expected_revision: None,
                 })
                 .await
                 .unwrap();

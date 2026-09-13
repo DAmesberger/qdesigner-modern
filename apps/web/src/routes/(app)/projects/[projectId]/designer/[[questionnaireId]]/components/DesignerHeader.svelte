@@ -59,6 +59,7 @@
   let showStudySettings = $state(false);
   let showTools = $state(false);
   let showDefinitionInspection = $state(false);
+  let showDefinitionReplacement = $state(false);
 
   const canUndo = $derived(designerStore.canUndo);
   const canRedo = $derived(designerStore.canRedo);
@@ -76,6 +77,15 @@
       label: 'Export definition (.qdef.json)',
       icon: Download,
       run: exportDefinition,
+      when: () => Boolean(questionnaireId && designerStore.projectId),
+    },
+    {
+      label: 'Replace draft from definition',
+      icon: FileSearch,
+      run: async () => {
+        if (designerStore.isDirty && !(await designerStore.saveQuestionnaire())) return;
+        showDefinitionReplacement = true;
+      },
       when: () => Boolean(questionnaireId && designerStore.projectId),
     },
     {
@@ -203,7 +213,7 @@
 />
 
 <header
-  class="flex h-11 items-center gap-3 px-3 bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] border-b border-[hsl(var(--glass-border))] shadow-[var(--shadow-sm)]"
+  class="relative z-30 flex h-11 items-center gap-3 px-3 bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] border-b border-[hsl(var(--glass-border))] shadow-[var(--shadow-sm)]"
   data-testid="designer-header"
 >
   <!-- Back button (mobile only) -->
@@ -477,5 +487,14 @@
   <QuestionnaireDefinitionInspectionDialog
     bind:open={showDefinitionInspection}
     projectId={designerStore.projectId}
+  />
+{/if}
+
+{#if designerStore.projectId && questionnaireId}
+  <QuestionnaireDefinitionInspectionDialog
+    bind:open={showDefinitionReplacement}
+    projectId={designerStore.projectId}
+    replaceQuestionnaireId={questionnaireId}
+    onreplaced={() => window.location.reload()}
   />
 {/if}

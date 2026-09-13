@@ -60,6 +60,8 @@ export type ApplyQuestionnaireDefinitionRequest = {
     definition: string;
     commit?: boolean;
     idempotencyKey?: string | null;
+    questionnaireId?: string | null;
+    expectedRevision?: number | null;
 };
 
 export type ApplyResult = {
@@ -69,6 +71,7 @@ export type ApplyResult = {
     revision?: number | null;
     canonical?: string | null;
     digest?: string | null;
+    beforeDigest?: string | null;
     metadata?: null | DefinitionMetadata;
     diagnostics: Array<DefinitionDiagnostic>;
 };
@@ -1057,6 +1060,7 @@ export type QuestionTemplate = {
 };
 
 export type Questionnaire = {
+    collaboration_epoch: number;
     id: string;
     project_id: string;
     name: string;
@@ -1135,6 +1139,7 @@ export type QuestionnaireSummary = {
 };
 
 export type QuestionnaireVersion = {
+    settings?: unknown;
     id: string;
     questionnaire_id: string;
     version: number;
@@ -1716,6 +1721,10 @@ export type UpdateProjectRequest = {
 };
 
 export type UpdateQuestionnaireRequest = {
+    /**
+     * Generation observed when loading the designer. Old generations cannot save after replacement.
+     */
+    expected_collaboration_epoch?: number | null;
     name?: string | null;
     description?: string | null;
     content?: unknown;

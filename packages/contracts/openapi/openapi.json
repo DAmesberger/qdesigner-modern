@@ -8819,6 +8819,20 @@
               "string",
               "null"
             ]
+          },
+          "questionnaireId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "expectedRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -8858,6 +8872,12 @@
             ]
           },
           "digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "beforeDigest": {
             "type": [
               "string",
               "null"
@@ -11813,6 +11833,7 @@
       "Questionnaire": {
         "type": "object",
         "required": [
+          "collaboration_epoch",
           "id",
           "project_id",
           "name",
@@ -11825,6 +11846,10 @@
           "version_patch"
         ],
         "properties": {
+          "collaboration_epoch": {
+            "type": "integer",
+            "format": "int32"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -12085,6 +12110,7 @@
           "version_patch"
         ],
         "properties": {
+          "settings": {},
           "id": {
             "type": "string",
             "format": "uuid"
@@ -13771,6 +13797,14 @@
       "UpdateQuestionnaireRequest": {
         "type": "object",
         "properties": {
+          "expected_collaboration_epoch": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Generation observed when loading the designer. Old generations cannot save after replacement."
+          },
           "name": {
             "type": [
               "string",
