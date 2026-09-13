@@ -97,7 +97,7 @@ pub(super) async fn create(
             e.constraint() == Some("questionnaire_definitions_project_id_name_version_key")
         }) {
             return Ok(invalid(vec![error("QDEF_NAME_CONFLICT", "/questionnaire/name",
-                "A questionnaire with this name already occupies the initial revision in this project.",
+                "A questionnaire with this name already exists in this project.",
                 Some("Choose a different questionnaire name and inspect the definition again, or import into another project."))]));
         }
         return Err(ApiError::from_db_error(failure));
