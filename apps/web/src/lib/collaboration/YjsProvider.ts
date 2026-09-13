@@ -24,7 +24,7 @@ const MSG_AWARENESS = 1;
 export interface YjsProviderOptions {
   /** The questionnaire ID this doc belongs to. */
   questionnaireId: string;
-  /** WebSocket URL override (defaults to ws://<host>/api/ws). */
+  /** WebSocket URL override (defaults to same-origin ws/wss at /api/ws). */
   wsUrl?: string;
 }
 
@@ -51,7 +51,7 @@ export class YjsProvider {
     this.wsUrl =
       options.wsUrl ||
       (typeof window !== 'undefined'
-        ? `ws://${window.location.host}/api/ws`
+        ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/ws`
         : '');
 
     // When the local doc changes, send an update to the server.

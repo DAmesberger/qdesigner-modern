@@ -25,6 +25,7 @@
   }
 
   let { data }: Props = $props();
+  let initializationPending = $state(true);
   let initializationError = $state<string | null>(null);
 
   // Full-canvas Reaction Lab. The trigger stays unchanged
@@ -75,7 +76,7 @@
   $effect(() => {
     const dirty = designerStore.isDirty;
     void designerStore.questionnaire; // re-run (reschedule) on each edit
-    if (!dirty || initializationError) return;
+    if (!dirty || initializationPending || initializationError) return;
 
     const timer = setTimeout(() => {
       if (designerStore.isDirty && !designerStore.isSaving) {
@@ -92,7 +93,7 @@
   // not await async callbacks, but the save is a fetch already in flight by the time
   // the component tears down, so a best-effort fire persists the pending edits.
   beforeNavigate(() => {
-    if (initializationError) return;
+    if (initializationPending || initializationError) return;
     if (designerStore.isDirty && !designerStore.isSaving) {
       void designerStore.saveQuestionnaire().then((ok) => {
         if (ok) autoSave.resetTracking();
@@ -104,7 +105,7 @@
   // best-effort save AND trigger the browser's native unsaved-changes prompt; the
   // debounce above keeps the unsaved window small when the user proceeds anyway.
   function handleBeforeUnload(event: BeforeUnloadEvent) {
-    if (initializationError) return;
+    if (initializationPending || initializationError) return;
     if (designerStore.isDirty) {
       void designerStore.saveQuestionnaire();
       event.preventDefault();
@@ -183,8 +184,6 @@
       designerStore.loadQuestionnaireFromDefinition(questionnaire);
     }
 
-    autoSave.start();
-
     // Wire up collaborative editing if online with a valid questionnaire
     const questionnaireId = designerStore.questionnaire?.id;
     if (questionnaireId) {
@@ -193,17 +192,21 @@
         questionnaireId,
       });
 
-      // The server is the sole seeder, so the Y.Doc starts EMPTY and only fills
-      // once its first sync with the server arrives. Until we hand off, the store
-      // keeps the local commit path + REST autosave — routing edits through an
-      // empty CRDT would wipe the canvas (lookup-free ops) or drop the edit
-      // (lookup ops no-op). We only reconcile the store from the doc AFTER handoff.
+      // Editing starts only after the authoritative document arrives. Allowing
+      // local REST edits before this handoff loses them when the first CRDT sync
+      // replaces the store, especially on a cold or slow connection.
       let handedOff = false;
+      const syncTimeout = setTimeout(() => {
+        if (!handedOff) {
+          initializationError = 'The questionnaire could not finish connecting. Check your connection and reload to try again.';
+          autoSave.stop();
+        }
+      }, 30000);
       const offChange = collab.onChange((updated) => {
         if (handedOff) designerStore.applyRemoteUpdate(updated);
       });
       const offSynced = collab.onSynced(() => {
-        if (!collab) return;
+        if (!collab || initializationError) return;
         const docQ = collab.getQuestionnaire();
         const docHasContent = docQ.pages.length > 0 || docQ.questions.length > 0;
         const storeHasContent =
@@ -211,18 +214,25 @@
           designerStore.questionnaire.questions.length > 0;
         // Hand off only when the synced doc actually carries the questionnaire (or
         // both are legitimately empty). If the doc synced empty while the store has
-        // REST content (e.g. the server could not seed the room), stay on the local
-        // path rather than wiping the canvas.
+        // REST content (e.g. the server could not seed the room), keep waiting
+        // behind the loading guard until sync succeeds or the timeout reports it.
         if (docHasContent || !storeHasContent) {
           handedOff = true;
           designerStore.applyRemoteUpdate(docQ);
           designerStore.setCollab(collab);
+          clearTimeout(syncTimeout);
+          initializationPending = false;
+          autoSave.start();
         }
       });
       collabCleanup = () => {
+        clearTimeout(syncTimeout);
         offChange();
         offSynced();
       };
+    } else {
+      initializationPending = false;
+      autoSave.start();
     }
   }
 
@@ -247,7 +257,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (initializationError) return;
+    if (initializationPending || initializationError) return;
     const isMeta = event.ctrlKey || event.metaKey;
     const isInput = isEditableTarget(event.target);
 
@@ -389,6 +399,8 @@
     <h1 class="text-xl font-semibold">Questionnaire could not be opened</h1>
     <p class="mt-3 whitespace-pre-wrap">{initializationError}</p>
   </div>
+{:else if initializationPending}
+  <div class="p-8" role="status" data-testid="designer-loading">Loading questionnaire…</div>
 {:else}
 <div class="h-screen flex flex-col bg-background" data-testid="designer-root">
   <DesignerHeader

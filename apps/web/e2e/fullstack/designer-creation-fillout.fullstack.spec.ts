@@ -25,7 +25,27 @@ test.describe('@fullstack designer to persisted form results', () => {
   }) => {
     const workspace = await provisionWorkspace(request);
     const name = `UI acceptance ${Date.now()}`;
-    const designer = await createInDesigner(page, workspace, name);
+    let releaseSync!: () => void;
+    const initialSync = new Promise<void>((resolve) => { releaseSync = resolve; });
+    let observedSync!: () => void;
+    const syncObserved = new Promise<void>((resolve) => { observedSync = resolve; });
+    await page.routeWebSocket(/\/api\/ws(?:\?|$)/, (socket) => {
+      const server = socket.connectToServer();
+      server.onMessage(async (message) => {
+        observedSync();
+        await initialSync;
+        socket.send(message);
+      });
+    });
+    const opening = createInDesigner(page, workspace, name);
+    try {
+      await syncObserved;
+      await expect(page.getByTestId('designer-loading')).toBeVisible();
+      await expect(page.getByTestId('designer-root')).toHaveCount(0);
+    } finally {
+      releaseSync();
+    }
+    const designer = await opening;
 
     const textId = await addModule(designer, 'text-input', 'participant_text');
     await page.getByLabel('Min Length', { exact: true }).fill('5');
