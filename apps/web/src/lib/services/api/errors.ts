@@ -15,11 +15,14 @@
 export class ApiError extends Error {
 	/** HTTP status, or null when the request never got a response (network down). */
 	readonly status: number | null;
+	/** Server-requested minimum delay before retrying, when supplied. */
+	readonly retryAfterMs: number | null;
 
-	constructor(message: string, status: number | null) {
+	constructor(message: string, status: number | null, retryAfterMs: number | null = null) {
 		super(message);
 		this.name = 'ApiError';
 		this.status = status;
+		this.retryAfterMs = retryAfterMs;
 	}
 }
 

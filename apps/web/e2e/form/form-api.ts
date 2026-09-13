@@ -260,8 +260,7 @@ export async function clickContinue(page: Page): Promise<void> {
  * Pre-load the runtime Svelte component for each module type into the registry's cache
  * while online. The dev server lazy-loads each `.svelte` chunk on first render, so a type
  * first needed OFFLINE can't fetch its chunk; warming the registry cache up front lets a
- * whole multi-type form run offline (and, by answering offline, sync once on reconnect
- * rather than per-response — staying under the `/sync` per-IP limiter). Best-effort: a
+ * whole multi-type form run offline. Best-effort: a
  * type that fails to warm simply falls back to its on-demand (online) load.
  */
 export async function warmModules(page: Page, types: string[]): Promise<void> {

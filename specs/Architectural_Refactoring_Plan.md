@@ -1,5 +1,7 @@
 # Architectural Refactoring Plan
 
+> Historical proposal. Current package boundaries and backend architecture are documented in [CLAUDE.md](../CLAUDE.md) and [ADR 0038](../docs/decisions/0038-current-architecture-and-decision-records.md).
+
 This document outlines the plan to refactor the `src/lib` directory towards a more domain-driven or "feature-sliced" architecture. This will improve modularity, reduce coupling, and enhance maintainability for this large-scale project.
 
 ## Proposed `src/lib` Structure
@@ -10,9 +12,9 @@ src/lib/
 │   │   # Foundational, cross-cutting modules that power the application.
 │   │   # Stable, low-level, and used by multiple features.
 │   │
-│   ├───api/             # Client for backend APIs (Supabase helpers, tRPC client)
+│   ├───api/             # Generated REST client for the Rust/Axum API
 │   ├───auth/            # Authentication logic, user session management
-│   ├───database/        # Supabase client, DB types, schema definitions
+│   ├───database/        # Browser IndexedDB persistence; server schema lives in apps/server/migrations
 │   ├───renderer/        # Core WebGL rendering engine
 │   ├───scripting/       # Core scripting and variable engines
 │   └───timing/          # Precision timing modules for experiments
@@ -26,7 +28,7 @@ src/lib/
 │   │
 │   ├───designer/
 │   │   │   # Everything related to the questionnaire design experience.
-│   │   ├───components/  # WYSIWYGCanvas, ScriptEditor, StyleEditor, etc.
+│   │   ├───components/  # WYSIWYGCanvas, StyleEditor, etc.
 │   │   ├───services/    # Persistence, versioning
 │   │   ├───stores/      # State management for the designer
 │   │   └───types/       # Types specific to the designer

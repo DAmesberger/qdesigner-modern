@@ -14,6 +14,7 @@ pub mod db;
 pub mod error;
 pub mod middleware;
 pub mod openapi;
+pub mod questionnaire_definition;
 pub mod rbac;
 pub mod series;
 pub mod state;

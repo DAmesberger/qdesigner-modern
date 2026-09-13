@@ -33,6 +33,7 @@
     "server:clippy": "cargo clippy --manifest-path apps/server/Cargo.toml -- -D warnings",
     "server:build": "cargo build --manifest-path apps/server/Cargo.toml",
     "server:test": "cargo test --manifest-path apps/server/Cargo.toml",
-    "verify": "pnpm lint && pnpm check && pnpm test:unit && pnpm test:integration && pnpm contracts:check && pnpm server:fmt && pnpm server:clippy && pnpm server:test"
+    "verify": "pnpm lint && pnpm check && pnpm test:unit && pnpm test:integration && pnpm contracts:check && pnpm server:fmt && pnpm server:clippy && pnpm server:test",
+    "test:e2e:acceptance": "pnpm --filter @qdesigner/web test:e2e:acceptance"
   }
 }

@@ -259,7 +259,6 @@ export interface Page {
   blocks?: Block[];
   layout?: LayoutConfig;
   conditions?: DisplayCondition[];
-  script?: string;
   /**
    * Per-page runtime settings, including the enforced {@link PageSettings.timeLimit}
    * (E-FLOW-5). Previously `PageSettings` was defined but never attached to a page;
@@ -818,11 +817,6 @@ export interface PageSettings {
   timeLimit?: number;
   /** Action when {@link timeLimit} elapses. Default `auto-advance`. */
   onTimeLimit?: PageTimeoutAction;
-  /**
-   * Cadence in ms for the page-script `onTimer` hook (E-FLOW-5). Replaces the
-   * previously hardcoded 1000ms interval. Default 1000.
-   */
-  timerIntervalMs?: number;
 }
 
 // ============================================================================

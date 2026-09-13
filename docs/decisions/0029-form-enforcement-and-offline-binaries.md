@@ -1,6 +1,6 @@
 # 0029 — Form answers: validation blocks at capture; binary answers are offline-first
 
-Status: accepted (2026-07-11, grilling session)
+Status: accepted (2026-07-11, grilling session); JavaScript hook execution/failure-open behavior partially superseded by [ADR 0039](0039-safe-logic-only-and-qdef-boundary.md). Module validity and offline binary decisions remain accepted.
 
 Unifying principle, extending ADRs 0026/0027 to the form path:
 **participant-correctable problems block at capture; infrastructure

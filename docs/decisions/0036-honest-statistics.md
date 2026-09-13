@@ -1,6 +1,6 @@
 # 0036 — The statistics a researcher reads must be the statistics we computed
 
-Status: accepted (2026-07-14)
+Status: accepted (2026-07-14); D1's separate-product-decision deferral for the PCA UI is superseded by [ADR 0040](0040-pca-remains-a-delivery-requirement.md). Numerical decisions remain accepted.
 
 Continues the repair opened by `701bf8d` (the distribution core: `standardNormalInverse`
 evaluated Acklam's polynomial in reverse Horner order, and `studentTCDF` discarded `df`).

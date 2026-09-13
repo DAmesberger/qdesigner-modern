@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach } from 'vitest';
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import PropertiesPanel from './PropertiesPanel.svelte';
 import { designerStore } from '$lib/stores/designer.svelte';
@@ -48,6 +48,14 @@ function seedTextQuestion() {
 describe('PropertiesPanel', () => {
   beforeEach(() => seedTextQuestion());
   afterEach(() => cleanup());
+
+  it('switches properties when the author adds another question type', async () => {
+    const view = render(PropertiesPanel);
+    await waitFor(() => expect(view.getByLabelText('Input Type')).toBeTruthy());
+    designerStore.addQuestion(designerStore.currentPage!.id, 'single-choice');
+    await waitFor(() => expect(view.getByLabelText('Question Type')).toHaveValue('single-choice'));
+    await waitFor(() => expect(view.getByTestId('designer-bulk-option-editor')).toBeTruthy());
+  });
 
   it('mounts the registry-dispatched module designer for a text-input question', async () => {
     render(PropertiesPanel);

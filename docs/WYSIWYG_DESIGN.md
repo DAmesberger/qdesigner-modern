@@ -1,5 +1,7 @@
 # WYSIWYG Questionnaire Designer - Design Document
 
+> Historical design proposal, not an inventory of shipped components. JavaScript authoring and execution are removed by [ADR 0039](decisions/0039-safe-logic-only-and-qdef-boundary.md). Safe Logic is the required replacement; its hook editor remains outstanding. The former JavaScript editor examples have been removed.
+
 ## Vision
 
 Transform the current structural editor into a visual WYSIWYG designer that shows questions exactly as participants will see them, while maintaining full flexibility for styling and advanced features like scripting and live testing.
@@ -21,7 +23,7 @@ Transform the current structural editor into a visual WYSIWYG designer that show
 │   Sidebar   │    Canvas (WYSIWYG)     │  Properties Panel  │
 │             │                         │                    │
 │ • Templates │  ┌─────────────────┐   │ • Style Editor    │
-│ • Elements  │  │  Page Preview   │   │ • Script Editor   │
+│ • Elements  │  │  Page Preview   │   │ • Safe Logic   │
 │ • Assets    │  │                 │   │ • Logic Builder   │
 │ • Pages     │  │  [Question 1]   │   │ • Animations      │
 │             │  │                 │   │                    │
@@ -127,39 +129,9 @@ interface QuestionRenderer {
 - Direct manipulation of response options
 - Live validation preview
 
-### 4. Advanced Script Editor
+### 4. Safe Logic authoring (required; outstanding)
 
-**Monaco-based Script Environment**:
-```typescript
-interface ScriptingEnvironment {
-  // Question lifecycle hooks
-  hooks: {
-    onMount: (context: QuestionContext) => void;
-    onResponse: (response: Response) => void;
-    onValidate: (value: any) => ValidationResult;
-    onNavigate: (direction: 'next' | 'back') => boolean;
-  };
-  
-  // Custom rendering functions
-  customRender?: (props: QuestionProps) => HTMLElement;
-  
-  // Dynamic styling
-  dynamicStyles?: (context: QuestionContext) => CSSProperties;
-  
-  // External API integration
-  apiCalls?: {
-    [key: string]: (params: any) => Promise<any>;
-  };
-}
-```
-
-**Features**:
-- TypeScript support with type checking
-- IntelliSense for questionnaire API
-- Syntax highlighting and error detection
-- Integrated debugger
-- Code snippets and templates
-- Version control integration
+Typed `qexpr/1` expressions and `qrule/1` rules replace the former JavaScript environment. Visual and textual editors must share that model. No custom JavaScript renderers, API calls or hook bodies are supported. See ADR 0039 for the current contract.
 
 ### 5. Live Testing System
 
@@ -192,7 +164,7 @@ interface ScriptingEnvironment {
 4. Build animation system
 
 ### Phase 3: Advanced Features (Weeks 5-6)
-1. Integrate Monaco editor for scripting
+1. Implement typed Safe Logic authoring over the shared model
 2. Add custom component system
 3. Implement live testing framework
 4. Create template library

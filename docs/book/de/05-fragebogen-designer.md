@@ -75,7 +75,7 @@ Die Leinwand unterstuetzt Zoom (Strg+= / Strg+-) und Zoom-Zuruecksetzung (Strg+0
 
 Die rechte Seitenleiste erscheint automatisch, wenn eine Frage, Seite, ein Block oder eine Variable ausgewaehlt wird. Ihr oberster Tab-Umschalter hat drei Tabs:
 
-- **Properties** (je nach Auswahl beschriftet als "Question Properties", "Page Properties" usw.): Das Eigenschaftenpanel, das selbst in die Tabs **Properties**, **Style** und **Script** unterteilt ist (siehe Abschnitt 5.4).
+- **Properties** (je nach Auswahl beschriftet als "Question Properties", "Page Properties" usw.): Das Eigenschaftenpanel, das selbst in die Tabs **Properties** und **Style** unterteilt ist (siehe Abschnitt 5.4).
 - **Translate** (Sprachen-Icon): Das Content-Translations-Panel zum Uebersetzen teilnehmerseitiger Texte in zusaetzliche Sprachen (siehe Abschnitt 5.14).
 - **Comments** (Sprechblasen-Icon): Threaded-Kommentare fuer die kollaborative Ueberpruefung.
 
@@ -83,7 +83,6 @@ Innerhalb des **Properties**-Tabs bietet das Eigenschaftenpanel:
 
 - **Eigenschaften**: Typspezifische Konfigurationsfelder fuer das ausgewaehlte Element (Fragetext, Optionen, Validierungsregeln, Anzeigeeinstellungen, Carry-Forward-Konfiguration, Aufmerksamkeitspruefungen).
 - **Stil**: Visuelle Stilsteuerungen ueber den Stil-Editor (Farben, Typografie, Abstaende, Schatten, benutzerdefiniertes CSS).
-- **Skript**: Der Monaco-basierte Skript-Editor zum Schreiben von Event-Hooks und benutzerdefinierter Logik (nur fuer Fragen verfuegbar).
 
 Das rechte Panel kann mit der Pin-Schaltflaeche **angepinnt** werden, sodass es sichtbar bleibt, auch wenn kein Element ausgewaehlt ist.
 
@@ -177,25 +176,9 @@ Der Stil-Editor bietet visuelle Steuerungen auf drei Ebenen:
 
 Ein **Benutzerdefiniertes CSS**-Textfeld steht immer fuer beliebige Stile zur Verfuegung.
 
-### Skript-Tab
+### Safe-Logic-Hooks
 
-Der Skript-Tab verwendet eine Monaco-Editor-Instanz (derselbe Editor wie in VS Code) und bietet:
-
-- Syntaxhervorhebung fuer JavaScript/TypeScript
-- IntelliSense mit Autovervollstaendigung
-- Typdefinitionen fuer die QDesigner-API
-- Strg+S zum Speichern, Strg+Leertaste fuer Vorschlaege
-
-Das Skript-Template stellt vier Event-Hooks bereit:
-
-```javascript
-export const hooks = {
-  onMount: (context) => { /* Frage wurde eingebunden */ },
-  onResponse: (response, context) => { /* Nutzer hat geantwortet */ },
-  onValidate: (value, context) => { /* true oder Fehlermeldung */ },
-  onNavigate: (direction, context) => { /* true zum Erlauben */ }
-};
-```
+Der JavaScript-Editor und die JavaScript-Ausfuehrung wurden entfernt. Hooks verwenden ausschliesslich Safe Logic (`qexpr/1` und `qrule/1`); Editor und Ausfuehrung dafuer sind noch ausstehende Anforderungen. Bestehende JavaScript-Hooks muessen vor der Ausfuehrung entfernt und neu formuliert werden. Siehe [ADR 0039](../../decisions/0039-safe-logic-only-and-qdef-boundary.md).
 
 ## 5.5 Block-Manager
 

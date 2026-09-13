@@ -29,7 +29,7 @@ export class DesignerPage {
   }
 
   async expectLoaded(): Promise<void> {
-    await expect(this.root).toBeVisible();
+    await expect(this.root).toBeVisible({ timeout: 30000 });
   }
 
   async addTextQuestionFromEmptyState(): Promise<void> {

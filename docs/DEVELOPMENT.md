@@ -1,176 +1,71 @@
-# Development Setup
+# Development setup
 
-QDesigner Modern is a modern monorepo using industry-standard tools and practices.
+QDesigner uses SvelteKit/Svelte 5, a Rust/Axum API, PostgreSQL 18, Redis and
+S3-compatible object storage. [ADR 0038](decisions/0038-current-architecture-and-decision-records.md)
+records the architecture baseline.
 
-## Prerequisites
+## Start development
 
-- Node.js 20+
-- pnpm 8+ (`npm install -g pnpm@8`)
-- Docker and Docker Compose
-- Git
+Use the repository's Nix shell (`nix develop` or the configured direnv environment)
+for Rust, Node.js, pnpm, just and database tools. Docker with Compose is needed for
+local infrastructure. Environment variable names are documented in
+[.env.example](../.env.example); retain existing local configuration and supply
+`.env.development` before starting the stack.
 
-## Quick Start
+From the repository root:
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd qdesigner-modern
-
-# Install dependencies
 pnpm install
-
-# Copy environment variables
-cp .env.example .env
-
-# First-time setup (starts services, runs migrations, seeds data)
-pnpm setup
-
-# Start development
-pnpm dev:all
+pnpm dev
 ```
 
-## Development Commands
+`pnpm dev` runs `just dev-all`: it starts the Compose services, loads the development
+environment, and starts the API and frontend. The backend applies the migrations
+in [apps/server/migrations](../apps/server/migrations) at startup using the migration
+connection, then handles requests with the restricted application connection.
 
-### 🚀 Starting Development
+For individual processes and other tasks, consult `just --list` and the scripts in
+[package.json](../package.json) and [apps/web/package.json](../apps/web/package.json).
+The frontend and server packages live under `apps/web` and `apps/server`.
+
+## Local services
+
+[Compose](../docker-compose.yml) is authoritative for infrastructure ports. Its
+current host defaults are:
+
+| Service | Address |
+|---|---|
+| App | http://localhost:4173 (APP_HOST / APP_PORT) |
+| Rust API | http://localhost:4100 (SERVER_PORT) |
+| PostgreSQL | localhost:15434 |
+| Redis | localhost:16381 |
+| MinIO S3 API | http://localhost:19003 |
+| MinIO console | http://localhost:19004 |
+| MailPit SMTP / web UI | localhost:11026 / http://localhost:18026 |
+
+Use `DATABASE_URL` for the `qdesigner_app` application role and
+`DATABASE_URL_MIGRATIONS` for the schema-owning migration role. Local password/JWT
+login and OIDC federation are implemented in the Rust service. Media is stored in
+MinIO locally; participant media requests use the same-origin API proxy. Yjs
+collaboration uses WebSocket with Redis relay.
+
+## Verification
 
 ```bash
-# Start everything (recommended)
-pnpm dev:all              # Starts services + all apps with proper logging
-
-# Start individual apps
-pnpm dev:designer         # Just the designer app
-pnpm dev:api             # Just the API server
-pnpm dev                 # All apps in parallel (basic)
-
-# Manage services
-pnpm services:start      # Start Docker services
-pnpm services:stop       # Stop Docker services
-pnpm services:logs       # View service logs
+pnpm check
+pnpm test:unit
+pnpm test:integration
+pnpm test:e2e
+pnpm server:test
+pnpm build
 ```
 
-### 🗄️ Database Management
-
-```bash
-# Run migrations
-pnpm db:migrate          # Apply database migrations
-
-# Seed data
-pnpm db:seed            # Insert test data
-
-# Reset database
-pnpm db:reset           # Drop, recreate, migrate, and seed
-
-# Clean setup
-pnpm setup:clean        # Complete fresh start
-```
-
-### 🧪 Testing
-
-```bash
-# Unit tests
-pnpm test               # Run all tests
-pnpm test:unit          # Run unit tests once
-pnpm test:unit:watch    # Run tests in watch mode
-pnpm test:coverage      # Generate coverage report
-
-# E2E tests
-pnpm test:e2e           # Run Playwright tests
-pnpm test:e2e:ui        # Open Playwright UI
-pnpm test:e2e:debug     # Debug mode
-pnpm test:wysiwyg       # Run WYSIWYG tests specifically
-```
-
-### 🔍 Code Quality
-
-```bash
-# Linting
-pnpm lint               # Check for lint errors
-pnpm lint:fix           # Auto-fix lint errors
-
-# Formatting
-pnpm format             # Format all files
-pnpm format:check       # Check formatting
-
-# Type checking
-pnpm typecheck          # Run TypeScript checks
-```
-
-### 🏗️ Building
-
-```bash
-# Build everything
-pnpm build              # Build all packages and apps
-
-# Build specific targets
-pnpm build:packages     # Build shared packages
-pnpm build:designer     # Build designer app
-
-# Clean builds
-pnpm clean              # Remove build artifacts
-pnpm clean:all          # Remove everything (including node_modules)
-```
-
-## Service URLs
-
-| Service         | URL                    | Description             |
-| --------------- | ---------------------- | ----------------------- |
-| App             | `http://${APP_HOST:-localhost}:${APP_PORT:-4173}` | QDesigner application   |
-| Backend API     | `http://localhost:${SERVER_PORT:-4100}` | Rust backend API        |
-| Supabase Studio | http://localhost:54321 | Database management UI  |
-| Mailhog         | http://localhost:18026 | Email testing interface |
-| PostgreSQL      | localhost:54322        | Database connection     |
-
-## Default Credentials
-
-The development environment uses these default values:
-
-- **Supabase URL**: `http://localhost:54321`
-- **Supabase Anon Key**: See `.env.development`
-- **Test Users**:
-  - admin@test.com (Admin role)
-  - designer@test.com (Designer role)
-
-## Environment Variables
-
-Development environment variables are automatically loaded from:
-
-- `.env.development` - Shared development settings
-- `apps/designer/.env` - App-specific settings
-
-No manual configuration needed!
+The full `pnpm verify` script additionally runs lint, contract regeneration/drift
+checks, Rust formatting and Clippy. E2E configuration and infrastructure requirements
+are documented in [apps/web/e2e/README.md](../apps/web/e2e/README.md).
 
 ## Troubleshooting
 
-### Services won't start
-
-```bash
-# Reset everything
-docker-compose down -v
-pnpm dev:setup
-```
-
-### Database connection issues
-
-```bash
-# Check if services are running
-docker-compose ps
-
-# View logs
-pnpm dev:services:logs
-```
-
-### Port conflicts
-
-If ports are already in use, stop conflicting services or modify `docker-compose.yml`.
-
-## Architecture
-
-The development setup includes:
-
-- **PostgreSQL 15**: Main database
-- **Supabase Auth**: Authentication service
-- **Supabase Realtime**: WebSocket connections
-- **Supabase Storage**: File storage
-- **Mailhog**: Email testing
-
-All services are configured to work together automatically with no manual setup required.
+Use `docker compose ps` and `docker compose logs <service>` to inspect infrastructure.
+Check configured ports and database role/connection settings before restarting.
+`docker compose down` stops the local services while retaining their volumes.

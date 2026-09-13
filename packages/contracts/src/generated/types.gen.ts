@@ -56,6 +56,15 @@ export type ApiKeyRecord = {
     created_at?: string | null;
 };
 
+export type ApplyResult = {
+    valid: boolean;
+    committed: boolean;
+    canonical?: string | null;
+    digest?: string | null;
+    metadata?: null | DefinitionMetadata;
+    diagnostics: Array<DefinitionDiagnostic>;
+};
+
 /**
  * A single live per-arm count row for the designer readout
  * (`GET /api/questionnaires/{id}/arm-counts`).
@@ -454,6 +463,45 @@ export type DashboardSummary = {
     stats: DashboardStats;
 };
 
+export type DefinitionArtifact = {
+    /**
+     * Exact canonical UTF-8 file contents, including the final LF.
+     */
+    canonical: string;
+    /**
+     * SHA-256 over RFC 8785 canonical JSON bytes (without the file LF).
+     */
+    digest: string;
+    /**
+     * Mutable installation revision. This is not part of the portable QDef.
+     */
+    revision: number;
+    metadata: DefinitionMetadata;
+    diagnostics: Array<DefinitionDiagnostic>;
+};
+
+export type DefinitionDiagnostic = {
+    code: string;
+    severity: DiagnosticSeverity;
+    path: string;
+    message: string;
+    hint?: string | null;
+    relatedPaths: Array<string>;
+};
+
+export type DefinitionMetadata = {
+    questionnaireName: string;
+    questionnaireVersion: string;
+    formatVersion: string;
+    questionCount: number;
+    pageCount: number;
+};
+
+export type DefinitionValidationFailure = {
+    valid: boolean;
+    diagnostics: Array<DefinitionDiagnostic>;
+};
+
 export type DeleteAccountRequest = {
     /**
      * Current account password, re-confirmed to authorize the erasure.
@@ -464,6 +512,8 @@ export type DeleteAccountRequest = {
 export type DeletedResponse = {
     deleted: boolean;
 };
+
+export type DiagnosticSeverity = 'error' | 'warning';
 
 export type DomainRecord = {
     id: string;
@@ -479,6 +529,13 @@ export type DomainRecord = {
     email_blacklist: Array<string>;
     welcome_message?: string | null;
     created_at?: string | null;
+};
+
+export type DryRunQuestionnaireDefinitionRequest = {
+    /**
+     * Raw UTF-8 JSON; QuestionnaireDefinition owns parsing and validation.
+     */
+    definition: string;
 };
 
 export type EnrollRequest = {
@@ -4688,6 +4745,78 @@ export type ExportResponsesResponses = {
      */
     200: unknown;
 };
+
+export type ExportDefinitionData = {
+    body?: never;
+    path: {
+        /**
+         * Project id
+         */
+        id: string;
+        /**
+         * Questionnaire id
+         */
+        qid: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/questionnaires/{qid}/definition';
+};
+
+export type ExportDefinitionErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Questionnaire not found
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stored Questionnaire is outside the supported QDef subset
+     */
+    422: DefinitionValidationFailure;
+};
+
+export type ExportDefinitionError = ExportDefinitionErrors[keyof ExportDefinitionErrors];
+
+export type ExportDefinitionResponses = {
+    /**
+     * Canonical portable Questionnaire Definition
+     */
+    200: DefinitionArtifact;
+};
+
+export type ExportDefinitionResponse = ExportDefinitionResponses[keyof ExportDefinitionResponses];
+
+export type DryRunDefinitionData = {
+    body: DryRunQuestionnaireDefinitionRequest;
+    path: {
+        /**
+         * Target project id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/questionnaire-definitions/dry-run';
+};
+
+export type DryRunDefinitionErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type DryRunDefinitionError = DryRunDefinitionErrors[keyof DryRunDefinitionErrors];
+
+export type DryRunDefinitionResponses = {
+    /**
+     * Canonicalization and validation result; never writes
+     */
+    200: ApplyResult;
+};
+
+export type DryRunDefinitionResponse = DryRunDefinitionResponses[keyof DryRunDefinitionResponses];
 
 export type ListVersionsData = {
     body?: never;

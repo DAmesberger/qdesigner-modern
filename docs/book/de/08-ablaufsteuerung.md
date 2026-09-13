@@ -278,7 +278,7 @@ Der Ablaufsteuerungs-Manager (erreichbar ueber das Ablauf-Panel in der linken Se
    - **Verzweigung**: Bedingte Navigation
    - **Schleife**: Abschnitt wiederholen
    - **Abbruch**: Fragebogen beenden
-3. Geben Sie die **Bedingung** ein (ein Formelausdruck mit Variablennamen und JavaScript-Operatoren).
+3. Geben Sie die **Bedingung** ein (ein Formelausdruck mit Variablennamen und unterstuetzten Formeloperatoren).
 4. Fuer Ueberspringen/Verzweigung: Waehlen Sie das **Ziel** aus dem Dropdown verfuegbarer Seiten und Fragen.
 5. Fuer Schleife: Geben Sie die **maximalen Iterationen** ein.
 6. Klicken Sie auf "Ablauf hinzufuegen".

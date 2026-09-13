@@ -32,7 +32,7 @@ Designer Application
 │   ├── Structure View
 │   ├── Properties Panel
 │   ├── Variable Manager
-│   └── Script Editor
+│   └── Safe Logic Editor (required; outstanding)
 ├── Preview & Test
 │   ├── Live Preview
 │   ├── Device Simulator
@@ -193,69 +193,11 @@ interface Variable {
 }
 ```
 
-### 3.5 Script Editor (Monaco Integration)
+### 3.5 Safe Logic Editor
 
-```typescript
-interface ScriptEditor {
-  // Monaco configuration
-  editor: monaco.editor.IStandaloneCodeEditor;
-  language: 'typescript';
-  theme: 'vs-dark' | 'vs-light';
+The required editor authors typed `qexpr/1` expressions and `qrule/1` rules, with textual and visual representations of the same model, completion, type/reference/cycle diagnostics and deterministic preview. See [ADR 0039](../docs/decisions/0039-safe-logic-only-and-qdef-boundary.md) and the [successor specification](../docs/questionnaire-definition-mcp-requirements.md).
 
-  // Features
-  intellisense: IntelliSenseProvider;
-  validation: ValidationProvider;
-  formatting: FormattingProvider;
-
-  // Custom additions
-  snippets: ScriptSnippet[];
-  apiDocs: APIDocumentation;
-
-  // Integration
-  variableCompletion: VariableCompletionProvider;
-  functionLibrary: BuiltInFunctions;
-}
-
-interface ScriptingAPI {
-  // Questionnaire control
-  questionnaire: {
-    getCurrentPage(): Page;
-    navigateToPage(pageId: string): void;
-    skipToQuestion(questionId: string): void;
-    end(): void;
-  };
-
-  // Variable access
-  variables: {
-    get(name: string): any;
-    set(name: string, value: any): void;
-    compute(formula: string): any;
-  };
-
-  // Response access
-  responses: {
-    get(questionId: string): any;
-    set(questionId: string, value: any): void;
-    validate(questionId: string): ValidationResult;
-  };
-
-  // UI control
-  ui: {
-    showMessage(message: string, type?: 'info' | 'warning' | 'error'): void;
-    enableNext(enabled: boolean): void;
-    enablePrevious(enabled: boolean): void;
-    showQuestion(questionId: string, visible: boolean): void;
-  };
-
-  // Utilities
-  utils: {
-    random(min?: number, max?: number): number;
-    shuffle<T>(array: T[]): T[];
-    formatDate(date: Date, format: string): string;
-    calculateAge(birthDate: Date): number;
-  };
-}
-```
+The former JavaScript hook editor is removed immediately. Existing JavaScript-bearing definitions fail with a diagnostic. Full Safe Logic hook authoring remains required implementation work.
 
 ## 4. Question Architecture
 

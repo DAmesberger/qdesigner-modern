@@ -5,7 +5,7 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root — the project's domain glossary (Paradigm, Preset, Trial, TimingSpec, …).
-- **`docs/decisions/`** — this repo's ADR directory (**not** `docs/adr/`). Read ADRs that touch the area you're about to work in. Numbered `0001-…` through `0028-…`; the directory also holds non-ADR planning docs (`PHASE_*_PLAN.md`, `SUPERVISOR_PROTOCOL.md`, `baseline.md`) — those are process artifacts, not decisions.
+- **`docs/decisions/`** — this repo's ADR directory (**not** `docs/adr/`). Start with the [decision index](../decisions/README.md), then read ADRs that touch the area you're about to work in; the directory also holds non-ADR planning docs (`PHASE_*_PLAN.md`, `SUPERVISOR_PROTOCOL.md`, `baseline.md`) — those are process artifacts, not decisions.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
@@ -19,7 +19,7 @@ Single-context repo:
 ├── docs/decisions/
 │   ├── 0001-rls.md
 │   ├── …
-│   └── 0028-trial-aggregates-explicit-minn.md
+│   └── README.md  # decision index and supersession
 ├── apps/            (web, server)
 └── packages/        (contracts, questionnaire-core, scripting-engine)
 ```
@@ -28,7 +28,7 @@ The workspace is a pnpm monorepo, but frontend and backend share one domain, so 
 
 ## Writing new ADRs
 
-New ADRs go in `docs/decisions/` with the next sequential number. **When an ADR's status changes, a new ADR supersedes it rather than editing in place** — this is the repo's established convention (see e.g. 0008 superseding 0007, 0011 superseding 0010).
+New ADRs go in `docs/decisions/` with the next sequential number. **When a decision changes, add a successor ADR and update the older status/forward link while retaining its rationale** — this is the repo's established convention (see e.g. 0008 superseding 0007, 0011 superseding 0010).
 
 ## Use the glossary's vocabulary
 

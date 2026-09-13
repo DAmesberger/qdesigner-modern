@@ -6,6 +6,8 @@ authorization … into fewer layers"). Does not touch ADR 0013's posture:
 RLS stays a separate DB-enforced defense-in-depth layer; application-side
 checks remain the sole mutation gate.
 
+**Implementation reconciliation (2026-09-11):** project mutations and the comments/series folds are implemented. Remaining L14–L17 exceptions and accessible helper halves are recorded in the [live ledger](0030-divergence-ledger.md); the universal-entry/private-helper goal is not fully delivered. ADRs 0032–0034 refine the rollout.
+
 ## Context
 
 Application-layer authorization is two calls today: a coarse membership/

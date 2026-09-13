@@ -1,6 +1,6 @@
 # ADR 0003 — Scripting engine: one home at packages/scripting-engine
 
-**Status:** Accepted (2026-05-15)
+**Status:** Accepted (2026-05-15); JavaScript-execution retention partially superseded by [ADR 0039](0039-safe-logic-only-and-qdef-boundary.md). Package consolidation remains accepted.
 
 **Decision.** Consolidate all scripting code into `packages/scripting-engine/`. Today three homes exist: the package (48 formula functions, mostly unused at runtime), `apps/web/src/lib/scripting-engine/` (the live `VariableEngine` + `ScriptEngine` that actually runs), and `apps/web/src/lib/core/scripting/` (a re-export shim). The CLAUDE.md claim that the in-app directory is a symlink is false.
 

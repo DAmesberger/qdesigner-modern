@@ -5484,6 +5484,142 @@
         ]
       }
     },
+    "/api/projects/{id}/questionnaires/{qid}/definition": {
+      "get": {
+        "tags": [
+          "questionnaire-definitions"
+        ],
+        "summary": "GET /api/projects/:id/questionnaires/:qid/definition",
+        "operationId": "export_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "qid",
+            "in": "path",
+            "description": "Questionnaire id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical portable Questionnaire Definition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefinitionArtifact"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Questionnaire not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Stored Questionnaire is outside the supported QDef subset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefinitionValidationFailure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/questionnaire-definitions/dry-run": {
+      "post": {
+        "tags": [
+          "questionnaire-definitions"
+        ],
+        "summary": "POST /api/projects/:id/questionnaire-definitions/dry-run",
+        "operationId": "dry_run_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Target project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DryRunQuestionnaireDefinitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Canonicalization and validation result; never writes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/questionnaires/{id}/versions": {
       "get": {
         "tags": [
@@ -8588,6 +8724,50 @@
           }
         }
       },
+      "ApplyResult": {
+        "type": "object",
+        "required": [
+          "valid",
+          "committed",
+          "diagnostics"
+        ],
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "committed": {
+            "type": "boolean"
+          },
+          "canonical": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DefinitionMetadata"
+              }
+            ]
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DefinitionDiagnostic"
+            }
+          }
+        }
+      },
       "ArmCount": {
         "type": "object",
         "description": "A single live per-arm count row for the designer readout\n(`GET /api/questionnaires/{id}/arm-counts`).",
@@ -9651,6 +9831,123 @@
           }
         }
       },
+      "DefinitionArtifact": {
+        "type": "object",
+        "required": [
+          "canonical",
+          "digest",
+          "revision",
+          "metadata",
+          "diagnostics"
+        ],
+        "properties": {
+          "canonical": {
+            "type": "string",
+            "description": "Exact canonical UTF-8 file contents, including the final LF."
+          },
+          "digest": {
+            "type": "string",
+            "description": "SHA-256 over RFC 8785 canonical JSON bytes (without the file LF)."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Mutable installation revision. This is not part of the portable QDef."
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/DefinitionMetadata"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DefinitionDiagnostic"
+            }
+          }
+        }
+      },
+      "DefinitionDiagnostic": {
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "path",
+          "message",
+          "relatedPaths"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/DiagnosticSeverity"
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "relatedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DefinitionMetadata": {
+        "type": "object",
+        "required": [
+          "questionnaireName",
+          "questionnaireVersion",
+          "formatVersion",
+          "questionCount",
+          "pageCount"
+        ],
+        "properties": {
+          "questionnaireName": {
+            "type": "string"
+          },
+          "questionnaireVersion": {
+            "type": "string"
+          },
+          "formatVersion": {
+            "type": "string"
+          },
+          "questionCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "DefinitionValidationFailure": {
+        "type": "object",
+        "required": [
+          "valid",
+          "diagnostics"
+        ],
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DefinitionDiagnostic"
+            }
+          }
+        }
+      },
       "DeleteAccountRequest": {
         "type": "object",
         "required": [
@@ -9673,6 +9970,13 @@
             "type": "boolean"
           }
         }
+      },
+      "DiagnosticSeverity": {
+        "type": "string",
+        "enum": [
+          "error",
+          "warning"
+        ]
       },
       "DomainRecord": {
         "type": "object",
@@ -9750,6 +10054,18 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "DryRunQuestionnaireDefinitionRequest": {
+        "type": "object",
+        "required": [
+          "definition"
+        ],
+        "properties": {
+          "definition": {
+            "type": "string",
+            "description": "Raw UTF-8 JSON; QuestionnaireDefinition owns parsing and validation."
           }
         }
       },
@@ -13655,6 +13971,10 @@
     {
       "name": "questionnaires",
       "description": "Questionnaire authoring, publishing, and export"
+    },
+    {
+      "name": "questionnaire-definitions",
+      "description": "Portable Questionnaire Definition inspection and exchange"
     },
     {
       "name": "comments",

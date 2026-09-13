@@ -16,7 +16,6 @@
   import StructuralCanvas from './StructuralCanvas.svelte';
   import DesignerCommandPalette from './components/DesignerCommandPalette.svelte';
   import { moduleRegistry } from '$lib/modules/registry';
-  import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import TourOverlay from '$lib/help/components/TourOverlay.svelte';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { isEditableTarget } from '$lib/components/designer/designerKeyboard';
@@ -26,10 +25,8 @@
   }
 
   let { data }: Props = $props();
-
-  let scriptEditorOpen = $state(false);
-  let scriptEditorQuestion = $state<any>(null);
-  let scriptEditorCleanup: (() => void) | null = null;
+  let initializationPending = $state(true);
+  let initializationError = $state<string | null>(null);
 
   // Full-canvas Reaction Lab. The trigger stays unchanged
   // (openLab → designerStore.openReactionLab → route fork on reactionLabQuestion);
@@ -79,7 +76,7 @@
   $effect(() => {
     const dirty = designerStore.isDirty;
     void designerStore.questionnaire; // re-run (reschedule) on each edit
-    if (!dirty) return;
+    if (!dirty || initializationPending || initializationError) return;
 
     const timer = setTimeout(() => {
       if (designerStore.isDirty && !designerStore.isSaving) {
@@ -96,6 +93,7 @@
   // not await async callbacks, but the save is a fetch already in flight by the time
   // the component tears down, so a best-effort fire persists the pending edits.
   beforeNavigate(() => {
+    if (initializationPending || initializationError) return;
     if (designerStore.isDirty && !designerStore.isSaving) {
       void designerStore.saveQuestionnaire().then((ok) => {
         if (ok) autoSave.resetTracking();
@@ -107,6 +105,7 @@
   // best-effort save AND trigger the browser's native unsaved-changes prompt; the
   // debounce above keeps the unsaved window small when the user proceeds anyway.
   function handleBeforeUnload(event: BeforeUnloadEvent) {
+    if (initializationPending || initializationError) return;
     if (designerStore.isDirty) {
       void designerStore.saveQuestionnaire();
       event.preventDefault();
@@ -130,22 +129,6 @@
   function disconnectPresence() {
     presence?.stop();
     presence = null;
-  }
-
-  function openScriptEditor(question: any) {
-    scriptEditorQuestion = question;
-    scriptEditorOpen = true;
-  }
-
-  function handleScriptEditorSave(script: string) {
-    if (scriptEditorQuestion) {
-      designerStore.updateQuestion(scriptEditorQuestion.id, {
-        settings: {
-          ...scriptEditorQuestion.settings,
-          script,
-        },
-      });
-    }
   }
 
   // A freshly-created questionnaire mints its id in the store, but the URL stays
@@ -201,8 +184,6 @@
       designerStore.loadQuestionnaireFromDefinition(questionnaire);
     }
 
-    autoSave.start();
-
     // Wire up collaborative editing if online with a valid questionnaire
     const questionnaireId = designerStore.questionnaire?.id;
     if (questionnaireId) {
@@ -211,17 +192,21 @@
         questionnaireId,
       });
 
-      // The server is the sole seeder, so the Y.Doc starts EMPTY and only fills
-      // once its first sync with the server arrives. Until we hand off, the store
-      // keeps the local commit path + REST autosave — routing edits through an
-      // empty CRDT would wipe the canvas (lookup-free ops) or drop the edit
-      // (lookup ops no-op). We only reconcile the store from the doc AFTER handoff.
+      // Editing starts only after the authoritative document arrives. Allowing
+      // local REST edits before this handoff loses them when the first CRDT sync
+      // replaces the store, especially on a cold or slow connection.
       let handedOff = false;
+      const syncTimeout = setTimeout(() => {
+        if (!handedOff) {
+          initializationError = 'The questionnaire could not finish connecting. Check your connection and reload to try again.';
+          autoSave.stop();
+        }
+      }, 30000);
       const offChange = collab.onChange((updated) => {
         if (handedOff) designerStore.applyRemoteUpdate(updated);
       });
       const offSynced = collab.onSynced(() => {
-        if (!collab) return;
+        if (!collab || initializationError) return;
         const docQ = collab.getQuestionnaire();
         const docHasContent = docQ.pages.length > 0 || docQ.questions.length > 0;
         const storeHasContent =
@@ -229,18 +214,25 @@
           designerStore.questionnaire.questions.length > 0;
         // Hand off only when the synced doc actually carries the questionnaire (or
         // both are legitimately empty). If the doc synced empty while the store has
-        // REST content (e.g. the server could not seed the room), stay on the local
-        // path rather than wiping the canvas.
+        // REST content (e.g. the server could not seed the room), keep waiting
+        // behind the loading guard until sync succeeds or the timeout reports it.
         if (docHasContent || !storeHasContent) {
           handedOff = true;
           designerStore.applyRemoteUpdate(docQ);
           designerStore.setCollab(collab);
+          clearTimeout(syncTimeout);
+          initializationPending = false;
+          autoSave.start();
         }
       });
       collabCleanup = () => {
+        clearTimeout(syncTimeout);
         offChange();
         offSynced();
       };
+    } else {
+      initializationPending = false;
+      autoSave.start();
     }
   }
 
@@ -265,6 +257,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    if (initializationPending || initializationError) return;
     const isMeta = event.ctrlKey || event.metaKey;
     const isInput = isEditableTarget(event.target);
 
@@ -380,14 +373,10 @@
   onMount(() => {
     void initializeDesigner().then(() => {
       connectPresence();
+    }).catch((error) => {
+      initializationError = error instanceof Error ? error.message : 'Failed to load questionnaire';
+      autoSave.stop();
     });
-
-    const handleOpenScriptEditor = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.question) openScriptEditor(detail.question);
-    };
-    window.addEventListener('open-script-editor', handleOpenScriptEditor);
-    scriptEditorCleanup = () => window.removeEventListener('open-script-editor', handleOpenScriptEditor);
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
@@ -400,12 +389,19 @@
     collabCleanup?.();
     collab?.destroy();
     collab = null;
-    scriptEditorCleanup?.();
   });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
+{#if initializationError}
+  <div class="p-8" role="alert" data-testid="designer-load-error">
+    <h1 class="text-xl font-semibold">Questionnaire could not be opened</h1>
+    <p class="mt-3 whitespace-pre-wrap">{initializationError}</p>
+  </div>
+{:else if initializationPending}
+  <div class="p-8" role="status" data-testid="designer-loading">Loading questionnaire…</div>
+{:else}
 <div class="h-screen flex flex-col bg-background" data-testid="designer-root">
   <DesignerHeader
     questionnaireName={designerStore.questionnaire.name}
@@ -451,11 +447,4 @@
   onclose={() => designerStore.toggleCommandPalette(false)}
 />
 <TourOverlay />
-{#if scriptEditorOpen && scriptEditorQuestion}
-  <ScriptEditorOverlay
-    question={scriptEditorQuestion}
-    variables={designerStore.questionnaire.variables}
-    onclose={() => { scriptEditorOpen = false; scriptEditorQuestion = null; }}
-    onsave={handleScriptEditorSave}
-  />
 {/if}

@@ -1,6 +1,6 @@
 # Phase 7 — Product-Completion & Wire-Up: Implementation Plan
 
-**Status:** Draft (2026-07-03). Awaiting user approval before P7.1 opens.
+**Status:** Historical plan (originally drafted 2026-07-03), superseded as the active work queue by [ADR 0038](0038-current-architecture-and-decision-records.md). The dated findings and exit criteria remain evidence, not a current completion checklist.
 **Authority:** ADR 0017 (opens this arc). Evidence: `docs/decisions/PHASE_7_FINDINGS.md` (2026-07-03 audit).
 **Phases 1–6 closed:** cleanup/RLS arc complete (main @ df4fbd0). This is a **new arc** — the first product-facing (frontend) arc after the backend/RLS hardening.
 **Execution model:** autonomous **loop** (see "Loop operating contract" below), with human decision-gates at architectural forks. This differs from the Phases 1–6 supervisor/team-lead/user triad: here the loop *is* the team-lead, `PHASE_7_FINDINGS.md` *is* the advisory queue, and the user is escalation-only.

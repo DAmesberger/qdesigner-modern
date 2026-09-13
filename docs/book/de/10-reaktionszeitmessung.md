@@ -138,7 +138,7 @@ Eine einzelne Option kann mehrere Bindings gleichzeitig tragen -- z.B. dieselbe 
 
 ## 10.5 Externe Antwort-Hardware (WebHID)
 
-Fuer Labore, die physische **Button-Boxen** verwenden, steht eine externe **ResponseSource** ueber die **WebHID**-API des Browsers zur Verfuegung (ADR 0024). HID-`inputreport`-Ereignisse tragen einen hochaufloesenden Zeitstempel auf derselben Uhr wie Tastaturereignisse, sodass die RT-Arithmetik unveraendert bleibt -- Hardware-Antworten werden exakt wie Tastaturantworten gemessen.
+Fuer Labore, die physische **Button-Boxen** verwenden, steht eine externe **ResponseSource** ueber die **WebHID**-API des Browsers zur Verfuegung (ADR 0037). HID-`inputreport`-Ereignisse tragen einen hochaufloesenden Zeitstempel auf derselben Uhr wie Tastaturereignisse, sodass die RT-Arithmetik unveraendert bleibt -- Hardware-Antworten werden exakt wie Tastaturantworten gemessen.
 
 ### 10.5.1 Nur Chromium, und ehrlich damit
 
@@ -159,7 +159,7 @@ Der HID-Adapter ist **descriptor-frei**: Er liest den HID-Descriptor eines Gerae
 
 Eine **Gamepad**-ResponseSource existiert ebenfalls und ist praktisch fuer die Erstellung (die *Press to Bind*-Funktion des Designers laesst Sie einen Button durch Druecken binden). Seien Sie sich jedoch ueber sein Timing im Klaren: Die Gamepad-API ist **gepollt**, nicht ereignisgesteuert. Der Poller sampelt einmal pro Animations-Frame und erkennt die steigende Flanke, sodass Antworten **auf die Frame-Schleife quantisiert sind (~8-16 ms)**. Behalten Sie Gamepad fuer den Komfort dort, wo diese Aufloesung akzeptabel ist; behandeln Sie es **nicht** als praezise RT-Quelle. Fuer Timing in Hardware-Qualitaet verwenden Sie die Tastatur oder eine WebHID-Button-Box.
 
-> **Bewusst zurueckgestellt.** TTL-/Trigger-*Ausgabe* fuer EEG-/Eye-Tracker-Synchronisation sowie Photodioden-/Loopback-Hardware zur Timing-Validierung sind absichtlich nicht in v1 enthalten (ADR 0024). Der Browser kann noch nicht eingrenzen, wann eine Ausgangsspannung umschlaegt; ein Photodioden-Fast-Follow wuerde das Anzeigelatenz-Modell von *modelliert* auf *gemessen* aufwerten.
+> **Bewusst zurueckgestellt.** TTL-/Trigger-*Ausgabe* fuer EEG-/Eye-Tracker-Synchronisation sowie Photodioden-/Loopback-Hardware zur Timing-Validierung sind absichtlich nicht in v1 enthalten (ADR 0037). Der Browser kann noch nicht eingrenzen, wann eine Ausgangsspannung umschlaegt; ein Photodioden-Fast-Follow wuerde das Anzeigelatenz-Modell von *modelliert* auf *gemessen* aufwerten.
 
 ---
 

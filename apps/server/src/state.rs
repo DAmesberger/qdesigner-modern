@@ -21,6 +21,8 @@ pub struct AppState {
     pub yjs_store: YjsStore,
     pub redis: Option<Arc<redis::Client>>,
     pub rate_limiter: RateLimiter,
+    /// Session-status reads are bounded independently of login attempts.
+    pub auth_session_limiter: RateLimiter,
     /// Per-email cap on verification-code sends (`authsend:{email}`).
     pub verify_send_limiter: RateLimiter,
     /// Per-email cap on verify-code attempts (`authverify:{email}`).
@@ -33,6 +35,8 @@ pub struct AppState {
     /// Deliberately generous (default 60/60s) — the auth-tuned `rate_limiter`
     /// would lock out a whole classroom starting a study behind one NAT.
     pub session_create_limiter: RateLimiter,
+    /// Per-session sync budget, isolated from auth and other participants (#51).
+    pub session_sync_limiter: RateLimiter,
     /// Per-QUESTIONNAIRE budget on session creation (`qcreate:{qid}`, default
     /// 600/60s). Keyed on the study, not the caller, so a distributed flood
     /// cannot spray one questionnaire's `arm_counts` / participant numbering by

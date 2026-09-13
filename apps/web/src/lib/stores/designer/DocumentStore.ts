@@ -1,3 +1,4 @@
+import { assertNoJavaScriptHooks, findJavaScriptHooks } from '@qdesigner/questionnaire-core';
 import { generateId } from '$lib/shared/utils/id';
 import { QuestionFactory } from '$lib/shared/factories/question-factory';
 import {
@@ -116,6 +117,8 @@ export class DocumentStore {
   }
 
   public normalizeQuestionnaire(input: DynamicValue): Questionnaire {
+    // Check the raw envelope before normalization can discard obsolete fields.
+    assertNoJavaScriptHooks(input);
     const source = input?.definition || input?.content || input || {};
     const fallback = this.createEmptyQuestionnaire({
       id: input?.id,
@@ -531,7 +534,11 @@ export class DocumentStore {
   }
 
   public validate(questionnaire: Questionnaire): DocumentValidationResult {
-    const errors: ValidationFinding[] = [];
+    const errors: ValidationFinding[] = findJavaScriptHooks(questionnaire).map(diagnostic => ({
+      field: diagnostic.path,
+      message: `${diagnostic.code}: ${diagnostic.message}`,
+      severity: 'error',
+    }));
     const warnings: ValidationFinding[] = [];
 
     if (!questionnaire.name?.trim()) {

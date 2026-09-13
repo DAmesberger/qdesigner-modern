@@ -135,3 +135,17 @@ describe('CSRF 403 one-shot recovery', () => {
     expect(authMock.refreshCsrfToken).not.toHaveBeenCalled();
   });
 });
+
+describe('transport retry metadata (#51)', () => {
+  it('preserves an HTTP 429 and Retry-After even when an upstream sends a plain text body', async () => {
+    const { callSdk } = await import('$lib/services/api/http');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('Please wait', {
+      status: 429, headers: { 'Retry-After': '60' },
+    }));
+    const error = await callSdk(() => apiClient.get({
+      baseUrl: 'http://api.test', url: '/sync', fetch: fetchMock, throwOnError: true,
+    })).catch(error => error);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(error).toMatchObject({ status: 429, message: 'Please wait', retryAfterMs: 60000 });
+  });
+});

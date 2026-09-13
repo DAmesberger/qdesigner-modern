@@ -1,6 +1,6 @@
 # Chapter 7: Variables, Formulas, and Scripting
 
-QDesigner includes a comprehensive variable system and formula engine that enables dynamic questionnaires with computed scores, conditional content, real-time feedback, and custom logic. This chapter covers the variable system, the complete formula function reference, variable piping, and the script editor.
+QDesigner includes a comprehensive variable system and formula engine that enables dynamic questionnaires with computed scores, conditional content, real-time feedback, and custom logic. This chapter covers the variable system, the complete formula function reference, variable piping, and the Safe Logic transition.
 
 ## 7.1 Variable System Overview
 
@@ -215,30 +215,7 @@ QDesigner's formula engine provides 47+ built-in functions across seven categori
 
 ## 7.5 Custom Functions
 
-Researchers can define custom functions using the `CustomFunctionManager`. Custom functions are written in JavaScript and can be saved with the questionnaire for reuse.
-
-**Definition structure**:
-```javascript
-{
-  name: 'SCORE_SCALE',
-  description: 'Convert raw score to standardized scale',
-  parameters: ['rawScore', 'min', 'max', 'newMin', 'newMax'],
-  body: `
-    const ratio = (rawScore - min) / (max - min);
-    return newMin + ratio * (newMax - newMin);
-  `
-}
-```
-
-**Built-in example functions**:
-
-| Function | Description |
-|---|---|
-| `SCORE_SCALE(raw, min, max, newMin, newMax)` | Linear rescaling. |
-| `CATEGORY_SCORE(items, weights)` | Weighted average of items. |
-| `AGE_GROUP(age)` | Categorize age into groups (Minor, Young Adult, Adult, etc.). |
-| `LIKERT_TO_NUMERIC(response)` | Convert text Likert responses to numbers. |
-| `RESPONSE_TIME_CATEGORY(ms)` | Categorize RT as Too Fast / Fast / Normal / Slow / Very Slow. |
+Authored custom logic must use Safe Logic. JavaScript custom-function bodies and the old custom-function manager have been removed. The existing allowlisted formula functions remain available; reusable Safe Logic function authoring is outstanding work. See [ADR 0039](../../decisions/0039-safe-logic-only-and-qdef-boundary.md).
 
 ## 7.6 Variable Piping
 
@@ -263,111 +240,11 @@ Variable piping works in:
 
 The piping engine resolves variables at runtime, so values are always current. If a variable has not been set yet, the placeholder is left as-is or replaced with an empty string (depending on configuration).
 
-## 7.7 The Script Editor
+## 7.7 Safe Logic Hooks
 
-The Script Editor provides per-question programmable logic using JavaScript. It is accessed via the "Script" tab in the Properties Panel (available only for question items).
+Hooks use the chosen Safe Logic language (`qexpr/1` expressions and `qrule/1` rules). The JavaScript editor and hook runtime have been removed. Existing questionnaires with JavaScript hooks are rejected with an `UNSAFE_JAVASCRIPT` diagnostic; they must be rewritten before execution.
 
-### Editor Features
-
-- **Monaco Editor**: Full VS Code editing experience with syntax highlighting, bracket matching, auto-indentation, and error diagnostics.
-- **Type definitions**: IntelliSense for the QDesigner API (`QuestionAPI.Context`, `VariableSystem`, `Response`, `ValidationResult`).
-- **Dark theme**: VS Dark color scheme optimized for code reading.
-- **Format and reset**: Toolbar buttons to auto-format code and reset to the template.
-- **Keyboard shortcuts**: Ctrl+S (save), Ctrl+Space (suggestions).
-
-### Event Hooks
-
-Scripts export a `hooks` object with four lifecycle hooks:
-
-#### `onMount(context)`
-
-Called when the question is first rendered. Use for initialization, setting focus, loading external data, or setting initial variable values.
-
-```javascript
-onMount: (context) => {
-  context.focusFirstInput();
-  context.variables.set('startTime', Date.now());
-}
-```
-
-#### `onResponse(response, context)`
-
-Called whenever the user provides or changes their response. Use for scoring, updating variables, triggering side effects.
-
-```javascript
-onResponse: (response, context) => {
-  if (response.value === 'correct') {
-    context.variables.increment('score', 10);
-  }
-  context.variables.set('lastResponse', response.value);
-}
-```
-
-#### `onValidate(value, context)`
-
-Called before the response is accepted. Return `true` to accept, or a string error message to reject.
-
-```javascript
-onValidate: (value, context) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(value)) {
-    return 'Please enter a valid email address';
-  }
-  return true;
-}
-```
-
-#### `onNavigate(direction, context)`
-
-Called when the user attempts to navigate forward or backward. Return `true` to allow, `false` to prevent.
-
-```javascript
-onNavigate: (direction, context) => {
-  if (direction === 'next' && !context.hasResponse) {
-    context.showError('Please provide a response before continuing');
-    return false;
-  }
-  return true;
-}
-```
-
-### Additional Exports
-
-#### `customRender(props)`
-Return a custom HTML element to replace the default rendering, or `null` to use the default.
-
-#### `dynamicStyles(context)`
-Return a CSS properties object that is applied to the question container based on runtime state.
-
-```javascript
-export const dynamicStyles = (context) => {
-  if (context.hasResponse) {
-    return { backgroundColor: '#F0FDF4', borderColor: '#10B981' };
-  }
-  return {};
-};
-```
-
-#### `apiCalls`
-An object of async functions for calling external APIs.
-
-### Context API
-
-The `context` object passed to hooks provides:
-
-| Property/Method | Description |
-|---|---|
-| `context.questionId` | The current question's ID. |
-| `context.questionType` | The question type string. |
-| `context.variables.get(name)` | Get a variable value. |
-| `context.variables.set(name, value)` | Set a variable value. |
-| `context.variables.increment(name, by?)` | Increment a numeric variable. |
-| `context.variables.decrement(name, by?)` | Decrement a numeric variable. |
-| `context.hasResponse` | Whether the user has responded. |
-| `context.response` | The current response value. |
-| `context.focusFirstInput()` | Focus the first input element. |
-| `context.showError(message)` | Display an error message. |
-| `context.showSuccess(message)` | Display a success message. |
+Full Safe Logic hook authoring and execution are still being implemented. Existing variable formulas, flow controls and module-owned answer constraints continue to work; they are not a general hook engine.
 
 ## 7.8 Practical Examples
 

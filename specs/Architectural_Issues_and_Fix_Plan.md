@@ -1,5 +1,7 @@
 # Architectural Issues and Fix Plan
 
+> Historical diagnostic plan. Verify each finding against current source before acting; [ADR 0038](../docs/decisions/0038-current-architecture-and-decision-records.md) identifies the current architecture and delivery records.
+
 ## Executive Summary
 
 This document provides a comprehensive analysis of all TypeScript errors, architectural inconsistencies, and missing implementations in the QDesigner Modern codebase. It includes a prioritized plan for addressing these issues with clear dependencies and implementation order.
@@ -33,12 +35,12 @@ question.config.rows.forEach((row: MatrixRow) => {
 - **Issue**: Line 216: Directive value must be a JavaScript expression enclosed in curly braces
 - **Root Cause**: Syntax error in event handler
 
-**Fix**:
+**Fix** (using `auth` from `$lib/services/auth`):
 ```svelte
 <button
   class="w-full"
   on:click={async () => {
-    await supabase.auth.signOut();
+    await auth.signOut();
     // rest of handler
   }}
 >

@@ -14,6 +14,11 @@ use crate::auth::models::AuthenticatedUser;
 use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::questionnaire_definition::{
+    ApplyInput as DefinitionApplyInput, ApplyResult as DefinitionApplyResult, DefinitionArtifact,
+    DefinitionReadFailure, DefinitionValidationFailure, PostgresDefinitionAccess,
+    QuestionnaireDefinition, ReadInput as DefinitionReadInput,
+};
 use crate::rbac::models::Permission;
 use crate::state::AppState;
 
@@ -95,6 +100,12 @@ pub struct ProjectQuestionnairePath {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct QuestionnaireCodePath {
     pub code: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DryRunQuestionnaireDefinitionRequest {
+    /// Raw UTF-8 JSON; QuestionnaireDefinition owns parsing and validation.
+    pub definition: String,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
@@ -361,6 +372,88 @@ pub async fn get_questionnaire(
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
     Ok(Json(q))
+}
+
+/// GET /api/projects/:id/questionnaires/:qid/definition
+#[utoipa::path(
+    get,
+    path = "/api/projects/{id}/questionnaires/{qid}/definition",
+    params(
+        ("id" = Uuid, Path, description = "Project id"),
+        ("qid" = Uuid, Path, description = "Questionnaire id")
+    ),
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "Canonical portable Questionnaire Definition", body = DefinitionArtifact),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Questionnaire not found", body = crate::openapi::ErrorEnvelope),
+        (status = 422, description = "Stored Questionnaire is outside the supported QDef subset", body = DefinitionValidationFailure)
+    ),
+    tags = ["questionnaire-definitions"]
+)]
+pub async fn export_definition(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(path): Path<ProjectQuestionnairePath>,
+) -> Result<Response, ApiError> {
+    let mut tx = tx.tx().await?;
+    let access = PostgresDefinitionAccess::new(&state, &mut tx, user.user_id);
+    let mut definitions = QuestionnaireDefinition::new(access);
+
+    match definitions
+        .read(DefinitionReadInput {
+            project_id: path.id,
+            questionnaire_id: path.qid,
+        })
+        .await
+    {
+        Ok(artifact) => Ok(Json(artifact).into_response()),
+        Err(DefinitionReadFailure::Access(error)) => Err(error),
+        Err(DefinitionReadFailure::Invalid(error)) => Ok((
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            Json(DefinitionValidationFailure {
+                valid: false,
+                diagnostics: error.diagnostics,
+            }),
+        )
+            .into_response()),
+    }
+}
+
+/// POST /api/projects/:id/questionnaire-definitions/dry-run
+#[utoipa::path(
+    post,
+    path = "/api/projects/{id}/questionnaire-definitions/dry-run",
+    request_body = DryRunQuestionnaireDefinitionRequest,
+    params(("id" = Uuid, Path, description = "Target project id")),
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "Canonicalization and validation result; never writes", body = DefinitionApplyResult),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["questionnaire-definitions"]
+)]
+pub async fn dry_run_definition(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<DryRunQuestionnaireDefinitionRequest>,
+) -> Result<Json<DefinitionApplyResult>, ApiError> {
+    let mut tx = tx.tx().await?;
+    let access = PostgresDefinitionAccess::new(&state, &mut tx, user.user_id);
+    let mut definitions = QuestionnaireDefinition::new(access);
+
+    Ok(Json(
+        definitions
+            .apply(DefinitionApplyInput {
+                project_id,
+                definition: body.definition,
+                commit: false,
+            })
+            .await?,
+    ))
 }
 
 /// PATCH /api/projects/:id/questionnaires/:qid

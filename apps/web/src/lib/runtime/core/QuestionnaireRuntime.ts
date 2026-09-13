@@ -33,7 +33,7 @@ import { computeReactionTimeMs } from './reactionTiming';
 import { resolveFlowTargetPageIndex } from './flowTarget';
 import { orderFlowCandidates } from './FlowGraph';
 import { ScreenerController, type ScreenOutResult } from '$lib/fillout/services/ScreenerController';
-import { ScriptExecutor } from './ScriptExecutor';
+import { assertNoJavaScriptHooks } from '@qdesigner/questionnaire-core';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
 import type { AttentionCheckConfig } from '../quality/AttentionCheck';
@@ -225,7 +225,6 @@ export class QuestionnaireRuntime {
   private readonly resourceManager: ResourceManager;
   private readonly responseCollector: ResponseCollector;
   private readonly blockRandomizer: BlockRandomizer;
-  private readonly scriptExecutor: ScriptExecutor;
   private readonly qualityReport: QualityReport;
   // Structured eligibility screener (E-FLOW-7 / F-20). Evaluates `settings.screeners`
   // against live variables at each page boundary; an ineligible verdict screens the
@@ -247,7 +246,6 @@ export class QuestionnaireRuntime {
 
   private currentAbortController: AbortController | null = null;
   private autoAdvanceTimeoutId: number | null = null;
-  private pageTimerIntervalId: ReturnType<typeof setInterval> | null = null;
 
   // Unified timer subsystem (E-FLOW-5): owns the survey / page / question deadline
   // scopes against one monotonic clock, frozen by pause() and restored on resume.
@@ -302,6 +300,7 @@ export class QuestionnaireRuntime {
   private pendingResumeItemIndex: number | null = null;
 
   constructor(config: RuntimeConfig) {
+    assertNoJavaScriptHooks(config.questionnaire);
     this.config = config;
 
     this.session = {
@@ -338,7 +337,6 @@ export class QuestionnaireRuntime {
     this.blockRandomizer = new BlockRandomizer(
       config.sessionId ? `${studySeed}::${config.sessionId}` : studySeed
     );
-    this.scriptExecutor = new ScriptExecutor();
     this.screener = new ScreenerController(
       config.questionnaire.settings?.screeners,
       this.variableEngine
@@ -731,7 +729,6 @@ export class QuestionnaireRuntime {
     this.isPaused = false;
 
     this.cancelCurrentExecution();
-    this.clearPageTimer();
     this.timers.clearAll();
 
     if (this.session.status === 'in_progress') {
@@ -748,7 +745,6 @@ export class QuestionnaireRuntime {
       runtime.teardown();
     }
     this.questionRuntimeCache.clear();
-    this.scriptExecutor.clearCache();
   }
 
   /**
@@ -1249,32 +1245,6 @@ export class QuestionnaireRuntime {
       return;
     }
 
-    // Execute onNavigate hook on the current question before leaving
-    if (this.currentQuestion) {
-      const direction = pageIndex > this.currentPageIndex ? 'forward' : 'back';
-      const allowed = this.scriptExecutor.executeOnNavigate(
-        this.currentQuestion,
-        direction,
-        this.variableEngine,
-        this.getResponseMap()
-      );
-      if (!allowed) {
-        return;
-      }
-    }
-
-    // Execute onPageExit for the outgoing page before cancelling execution
-    if (this.currentPage?.script) {
-      this.scriptExecutor.executeOnPageExit(
-        this.currentPage.id,
-        this.currentPage.name,
-        this.currentPageIndex,
-        this.currentPage.script,
-        this.variableEngine,
-        this.getResponseMap()
-      );
-    }
-
     this.cancelCurrentExecution();
 
     // Track page timing for speeder detection
@@ -1303,42 +1273,7 @@ export class QuestionnaireRuntime {
       this.qualityReport.speeder.enterPage(this.currentPage.id);
     }
 
-    // Execute onPageEnter for the incoming page and set up timer if configured
-    if (this.currentPage?.script) {
-      this.scriptExecutor.executeOnPageEnter(
-        this.currentPage.id,
-        this.currentPage.name,
-        this.currentPageIndex,
-        this.currentPage.script,
-        this.variableEngine,
-        this.getResponseMap()
-      );
-
-      // Set up onTimer interval if the page script defines an onTimer hook
-      const pageHooks = this.scriptExecutor.getPageHooks(
-        this.currentPage.id,
-        this.currentPage.script
-      );
-      if (pageHooks.onTimer) {
-        const page = this.currentPage;
-        const pageIdx = this.currentPageIndex;
-        // E-FLOW-5, step 3: cadence is configurable per page (was a hardcoded 1000ms).
-        const timerInterval = page.settings?.timerIntervalMs ?? 1000;
-        this.pageTimerIntervalId = setInterval(() => {
-          this.scriptExecutor.executeOnTimer(
-            page.id,
-            page.name,
-            pageIdx,
-            page.script!,
-            this.variableEngine,
-            this.getResponseMap()
-          );
-        }, timerInterval);
-      }
-    }
-
-    // Arm the page time limit (E-FLOW-5, step 3) now that the visible landing page is
-    // settled. No-op when the page declares no limit (also clears any prior page timer).
+    // Arm the page deadline after settling on the visible page.
     this.armPageTimer();
 
     this.currentPageItems = this.getPageItems();
@@ -1666,9 +1601,6 @@ export class QuestionnaireRuntime {
       this.variableEngine.setVariable(`${question.id}_value`, cfInitialValue, 'carry-forward');
     }
 
-    // Execute onMount hook when question becomes active
-    this.scriptExecutor.executeOnMount(question, this.variableEngine, this.getResponseMap());
-
     const runtime = await this.resolveQuestionRuntime(metadata);
     if (runtime) {
       const context = this.createQuestionRuntimeContext(question);
@@ -1707,8 +1639,6 @@ export class QuestionnaireRuntime {
     question: Question,
     metadata: ModuleMetadata
   ): Promise<void> {
-    // Execute onMount hook for non-interactive items too (e.g. instructions with scripts)
-    this.scriptExecutor.executeOnMount(question, this.variableEngine, this.getResponseMap());
 
     const advance = async () => {
       await this.clearPresentation();
@@ -2030,14 +1960,6 @@ export class QuestionnaireRuntime {
     onsetTime: number,
     runtimeResult: QuestionRuntimeResult
   ): Promise<void> {
-    // Execute onValidate hook for runtime-collected responses
-    const validationResult = this.scriptExecutor.executeOnValidate(
-      question,
-      runtimeResult.value,
-      this.variableEngine,
-      this.getResponseMap()
-    );
-
     const timestamp = performance.now();
     const reactionTime = runtimeResult.reactionTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
@@ -2049,7 +1971,7 @@ export class QuestionnaireRuntime {
       value: runtimeResult.value,
       reactionTime,
       stimulusOnsetTime: onsetTime,
-      valid: !runtimeResult.timedOut && validationResult.valid,
+      valid: !runtimeResult.timedOut,
       ...this.iterationFields(),
       metadata: runtimeResult.metadata,
     };
@@ -2062,14 +1984,6 @@ export class QuestionnaireRuntime {
       question.id,
       runtimeResult.value,
       question.attentionCheck as AttentionCheckConfig | undefined
-    );
-
-    // Execute onResponse hook after the response is recorded
-    this.scriptExecutor.executeOnResponse(
-      question,
-      runtimeResult.value,
-      this.variableEngine,
-      this.getResponseMap()
     );
 
     await this.clearPresentation();
@@ -2088,44 +2002,14 @@ export class QuestionnaireRuntime {
     value: DynamicValue,
     responseMetadata?: ResponseCaptureMetadata
   ): Promise<void> {
-    // Script onValidate hook (ADR 0029). An EXPLICIT invalid verdict blocks the advance
-    // (the problem is participant-correctable): keep the item presented, surface the
-    // message, record nothing. A THROW/timeout instead FAILS OPEN — executeOnValidate
-    // returns valid with `failedOpen` set — so the answer records with provenance and the
-    // participant advances. A forced (timeout) submit is never blocked: the timer already
-    // decided the item is over.
-    const validationResult = this.scriptExecutor.executeOnValidate(
-      question,
-      value,
-      this.variableEngine,
-      this.getResponseMap()
-    );
-
     // Deadline auto-submit (E-FLOW-5): this commit was forced by the question timer, so
     // stamp the Response timedOut and mark it invalid regardless of validation state.
     const timedOut = this.pendingTimeoutQuestionId === question.id;
 
-    if (!validationResult.valid && !timedOut) {
-      // Explicit invalid verdict (a script throw fails open and never reaches here):
-      // block the advance and hand the message to the host to show. Nothing is recorded,
-      // the collector keeps running, and the participant can correct and resubmit.
-      this.config.formHost?.showValidationError?.(
-        validationResult.error || 'This answer is not valid.'
-      );
-      return;
-    }
-    // Passed (or forced through by a timeout): clear any prior script-validation block.
-    this.config.formHost?.showValidationError?.(null);
     this.pendingTimeoutQuestionId = null;
 
     const timestamp = responseMetadata?.timestamp ?? performance.now();
     const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
-
-    // Provenance for a failed-open script validation (ADR 0029): the verdict is
-    // untrustworthy, so record that fact rather than let analytics assume "valid".
-    const validationProvenance = validationResult.failedOpen
-      ? { onValidate: 'failed-open' as const, error: validationResult.error }
-      : undefined;
 
     const response: Response = {
       id: nanoid(),
@@ -2135,19 +2019,15 @@ export class QuestionnaireRuntime {
       value,
       reactionTime,
       stimulusOnsetTime: onsetTime,
-      // Honest validity: the script verdict, the timeout flag, AND the module's own
+      // Honest validity: the timeout flag and the module's own
       // last-reported validity (the gate prevents an invalid module value from reaching
       // a deliberate submit; a forced timeout submit can still carry one).
-      valid: validationResult.valid && !timedOut && this.activeFormValidation.valid,
+      valid: !timedOut && this.activeFormValidation.valid,
       timedOut: timedOut || undefined,
       ...this.iterationFields(),
-      metadata:
-        responseMetadata || validationProvenance
-          ? {
-              ...(responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : {}),
-              ...(validationProvenance ? { validation: validationProvenance } : {}),
-            }
-          : undefined,
+      metadata: responseMetadata
+        ? { firstInteraction: responseMetadata.responseTimeMs }
+        : undefined,
     };
 
     this.session.responses.push(response);
@@ -2167,14 +2047,6 @@ export class QuestionnaireRuntime {
       question.id,
       value,
       question.attentionCheck as AttentionCheckConfig | undefined
-    );
-
-    // Execute onResponse hook after the response is recorded
-    this.scriptExecutor.executeOnResponse(
-      question,
-      value,
-      this.variableEngine,
-      this.getResponseMap()
     );
 
     this.responseCollector.stop();
@@ -2960,7 +2832,6 @@ export class QuestionnaireRuntime {
       this.currentAbortController = null;
     }
 
-    this.clearPageTimer();
     // Guard against a question deadline firing after the item was torn down (E-FLOW-5,
     // step 10). The survey / page scopes are managed by their own arm/clear paths.
     this.timers.clear('question');
@@ -2969,13 +2840,6 @@ export class QuestionnaireRuntime {
     this.responseCollector.stop();
     this.config.formHost?.clear();
     this.renderer?.clearRenderables();
-  }
-
-  private clearPageTimer(): void {
-    if (this.pageTimerIntervalId !== null) {
-      clearInterval(this.pageTimerIntervalId);
-      this.pageTimerIntervalId = null;
-    }
   }
 
   private isAbortError(error: unknown): boolean {

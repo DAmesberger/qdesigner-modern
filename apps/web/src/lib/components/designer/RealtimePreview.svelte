@@ -4,6 +4,7 @@
   const designerStore = getDesignerContext();
   import type { Questionnaire, Question, QuestionnaireTheme, Variable } from '$lib/shared';
   import { VariableEngine } from '@qdesigner/scripting-engine';
+  import { assertNoJavaScriptHooks } from '@qdesigner/questionnaire-core';
   import QuestionRenderer from '../questions/QuestionRenderer.svelte';
   import { writable } from 'svelte/store';
   import Button from '$lib/components/ui/Button.svelte';
@@ -143,6 +144,8 @@
     try {
       isLoading = true;
       error = null;
+
+      assertNoJavaScriptHooks(newQuestionnaire);
 
       previewQuestionnaire = JSON.parse(JSON.stringify(newQuestionnaire)); // Deep clone
 

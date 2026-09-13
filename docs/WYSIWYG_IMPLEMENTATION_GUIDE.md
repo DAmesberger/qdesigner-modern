@@ -1,5 +1,7 @@
 # WYSIWYG Implementation Guide
 
+> Historical design proposal, not an inventory of shipped components. JavaScript authoring and execution are removed by [ADR 0039](decisions/0039-safe-logic-only-and-qdef-boundary.md). Safe Logic is the required replacement; its hook editor remains outstanding. The former JavaScript editor examples have been removed.
+
 ## Overview
 
 This guide explains how to integrate the new WYSIWYG components into the existing QDesigner architecture. The approach maintains backward compatibility while adding powerful visual editing capabilities.
@@ -23,11 +25,9 @@ This guide explains how to integrate the new WYSIWYG components into the existin
 - Color pickers, sliders, and select controls
 - Custom CSS injection support
 
-### 4. **Script Editor** (`ScriptEditor.svelte`)
-- Monaco-based code editor with TypeScript support
-- Predefined hooks for question lifecycle
-- IntelliSense for questionnaire API
-- Syntax highlighting and error detection
+### 4. Safe Logic authoring (required; outstanding)
+
+Typed expressions and rules share the Safe Logic model. No JavaScript bodies or browser API access are supported.
 
 ### 5. **Live Test Runner** (`LiveTestRunner.svelte`)
 - Instant preview in desktop/tablet/mobile modes
@@ -47,7 +47,6 @@ interface DesignerState {
   // WYSIWYG state
   viewMode: 'structural' | 'wysiwyg';
   theme: QuestionnaireTheme;
-  customScripts: Record<string, string>; // questionId -> script
   previewDevice: 'desktop' | 'tablet' | 'mobile';
   showGrid: boolean;
   snapToGrid: boolean;
@@ -71,11 +70,6 @@ updateThemeProperty: (path: string[], value: any) => update(state =>
   })
 ),
 
-setQuestionScript: (questionId: string, script: string) => update(state =>
-  produce(state, draft => {
-    draft.customScripts[questionId] = script;
-  })
-),
 ```
 
 ### Step 2: Create WYSIWYG Canvas Component
@@ -145,56 +139,7 @@ setQuestionScript: (questionId: string, script: string) => update(state =>
 
 ### Step 3: Update Properties Panel
 
-```svelte
-<!-- In PropertiesPanel.svelte, add tabs: -->
-<script>
-  import StyleEditor from '../wysiwyg/StyleEditor.svelte';
-  import ScriptEditor from '../wysiwyg/ScriptEditor.svelte';
-  
-  let activeTab: 'properties' | 'style' | 'script' = 'properties';
-</script>
-
-<div class="properties-panel">
-  <!-- Tab buttons -->
-  <div class="tabs">
-    <button 
-      class:active={activeTab === 'properties'}
-      on:click={() => activeTab = 'properties'}
-    >
-      Properties
-    </button>
-    <button 
-      class:active={activeTab === 'style'}
-      on:click={() => activeTab = 'style'}
-    >
-      Style
-    </button>
-    <button 
-      class:active={activeTab === 'script'}
-      on:click={() => activeTab = 'script'}
-      disabled={!$selectedItem || $selectedItemType !== 'question'}
-    >
-      Script
-    </button>
-  </div>
-  
-  <!-- Tab content -->
-  {#if activeTab === 'properties'}
-    <!-- Existing properties content -->
-  {:else if activeTab === 'style'}
-    <StyleEditor
-      theme={$designerStore.theme}
-      selectedElement={$selectedItemType || 'global'}
-      on:update={(e) => designerStore.updateThemeProperty(e.detail.path, e.detail.value)}
-    />
-  {:else if activeTab === 'script' && $selectedItem}
-    <ScriptEditor
-      question={$selectedItem}
-      onUpdate={(script) => designerStore.setQuestionScript($selectedItem.id, script)}
-    />
-  {/if}
-</div>
-```
+Use the properties and style tabs. Safe Logic authoring must use the typed expression/rule boundary specified in ADR 0039; the former script tab is removed.
 
 ### Step 4: Add View Mode Toggle
 
@@ -297,18 +242,9 @@ const debouncedThemeUpdate = debounce((path, value) => {
 }, 100);
 ```
 
-### 3. Lazy Load Monaco Editor
-```typescript
-// Only load Monaco when script tab is opened
-let monacoLoaded = false;
+### 3. Load formula editing on demand
 
-async function loadMonaco() {
-  if (!monacoLoaded) {
-    await import('monaco-editor');
-    monacoLoaded = true;
-  }
-}
-```
+Load Monaco only when a formula editor is opened. Hook authoring awaits the Safe Logic editor.
 
 ## Advanced Features
 
@@ -375,7 +311,7 @@ const questionTemplates = {
 This WYSIWYG implementation provides:
 - **True visual editing** - See exactly what participants see
 - **Full flexibility** - Complete control over styling and behavior
-- **Advanced features** - Scripting, animations, responsive design
+- **Advanced features** - Safe Logic, animations, responsive design
 - **Smooth migration** - Works alongside existing features
 
 The modular approach allows incremental adoption while maintaining the powerful features that make QDesigner unique.

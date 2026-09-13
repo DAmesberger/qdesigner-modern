@@ -1,42 +1,9 @@
-# E2E browser lanes (QUARANTINED — run on demand, not on a schedule).
-#
-# Why this workflow is not scheduled and not part of the PR gate:
-#
-# These lanes have never had a green run. Until now they could not even start —
-# CI died at `pnpm/action-setup` on every push — and once that was fixed the
-# specs themselves turned out to be broken in ways that predate this workflow:
-#
-#   * @smoke — drives a hardcoded project id `test-project-1` that does not
-#     exist, with no auth wiring, against a job that starts no backend. The
-#     repo's own audit already documented this, at
-#     docs/decisions/PHASE_7_FINDINGS.md:34:
-#         "The smoke PR gate is genuinely broken and has no auth wiring [...]
-#          test-project-1 is a nonexistent hardcoded id and test #2's
-#          /test-runtime route is deleted. Fix is as recommended: seed auth like
-#          the fullstack lane and provision a real workspace."
-#     (This workflow DOES give it a backend, which removes one of the two
-#     causes; the hardcoded id and the missing auth seeding remain.)
-#
-#   * @fullstack — 2/2 failing. The specs successfully register, provision a
-#     workspace, create, publish and open the questionnaire by code, and then
-#     never reach `fillout-completion-screen`; the designer spec times out in
-#     `page.waitForResponse` waiting for its save. Backend-side this is clean
-#     (migrations apply, server healthy), so these are app/spec defects.
-#
-# Fixing them is test-authoring and product debugging, not CI plumbing, so they
-# are quarantined here rather than deleted (no spec was removed) and rather than
-# left permanently red (a red pipeline nobody can act on trains everyone to
-# ignore CI — the exact failure this cleanup is meant to end).
-#
-# The schedule is commented out DELIBERATELY. Re-enable it, and move the lanes
-# back into ci.yml's PR gate, once the specs above are fixed.
+# Broader on-demand browser coverage. The bounded PR acceptance workflow is
+# e2e-acceptance.yml; see docs/end-to-end-acceptance-report.md for actual evidence.
 
 name: E2E (on demand)
 
 on:
-  # Re-enable once the @smoke and @fullstack specs are fixed (see header).
-  # schedule:
-  #   - cron: '0 4 * * *'
   workflow_dispatch:
 
 jobs:
@@ -64,6 +31,10 @@ jobs:
       APP_HOST: localhost
       APP_PORT: 4173
       CORS_ORIGINS: http://localhost:4173
+      PUBLIC_APP_ORIGIN: http://localhost:4173
+      VITE_API_URL: ""
+      VITE_APP_URL: http://localhost:4173
+      VITE_WS_URL: ws://localhost:4173/api/ws
       # release build expands sqlx macros from the committed apps/server/.sqlx
       # cache; the compose DB has no schema until the server migrates on boot.
       SQLX_OFFLINE: "true"
@@ -178,8 +149,6 @@ jobs:
         run: pnpm test:e2e:visual
 
       - name: Run reaction (WebGL) E2E tests
-        # Runs late so its anonymous session-creates don't share the 60 s
-        # auth-limiter window (10 req/IP) with the other lanes' registrations.
         if: ${{ !cancelled() }}
         run: pnpm test:e2e:reaction
 

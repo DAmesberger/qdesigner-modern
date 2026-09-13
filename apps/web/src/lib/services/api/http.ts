@@ -5,6 +5,8 @@ type ApiErrorPayload = {
   error?: string | { message?: string; status?: number };
   message?: string;
   details?: unknown;
+  httpStatus?: number;
+  retryAfter?: string | null;
 };
 
 export type SdkFieldResponse<T> = {
@@ -19,6 +21,7 @@ export function getApiErrorStatus(payload: unknown): number | null {
   }
 
   const typed = payload as ApiErrorPayload;
+  if (typeof typed.httpStatus === 'number') return typed.httpStatus;
   if (typed.error && typeof typed.error === 'object' && typeof typed.error.status === 'number') {
     return typed.error.status;
   }
@@ -86,7 +89,17 @@ export function unwrapSdkResult<T>(result: T | SdkFieldResponse<T>): T {
  * save could only ever be reported as a generic "something went wrong".
  */
 function toApiError(error: unknown): ApiError {
-  return new ApiError(parseApiErrorMessage(error, 'Request failed'), getApiErrorStatus(error));
+  if (error instanceof ApiError) return error;
+  const retryAfter = error && typeof error === 'object'
+    ? (error as ApiErrorPayload).retryAfter
+    : null;
+  let retryAfterMs: number | null = null;
+  if (typeof retryAfter === 'string' && retryAfter.trim()) {
+    const seconds = Number(retryAfter);
+    const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
+    if (Number.isFinite(delay)) retryAfterMs = Math.max(0, delay);
+  }
+  return new ApiError(parseApiErrorMessage(error, 'Request failed'), getApiErrorStatus(error), retryAfterMs);
 }
 
 export async function callSdk<T>(request: () => Promise<T | SdkFieldResponse<T>>): Promise<T> {

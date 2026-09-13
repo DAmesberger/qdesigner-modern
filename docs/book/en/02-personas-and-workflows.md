@@ -120,7 +120,7 @@ This chapter defines five representative user personas for QDesigner and maps th
     - Keyboard shortcuts: Ctrl+S (save), Ctrl+P (preview), Ctrl+K (command palette), Ctrl+Z/Ctrl+Shift+Z (undo/redo), Ctrl+D (duplicate), Delete (remove), Alt+Arrow (reorder)
     - Adds questions by dragging from palette or using Ctrl+Shift+A
     - Configures variables and scripting via Variable Manager
-    - Opens Script Editor overlay for advanced logic
+    - Authors advanced logic in Safe Logic (required editor still outstanding)
     - Experimental Design panel (flask icon): configures between/within-subjects design
     - Data Quality panel (shield icon): attention checks, timing validation
     - Auto-save runs continuously; manual save with Ctrl+S
@@ -246,7 +246,7 @@ This chapter defines five representative user personas for QDesigner and maps th
      d. **Block Manager**: organizes questions into logical blocks/pages
      e. **Flow Control Manager**: sets up skip logic and branching
      f. **Variable Manager**: defines computed variables, formulas, piping
-     g. **Script Editor** (overlay): writes advanced scripts for complex logic
+     g. **Safe Logic**: authors typed expressions and rules (required editor still outstanding)
    - Uses keyboard shortcuts extensively:
      - Ctrl+K: Command palette for quick actions
      - Ctrl+S: Save

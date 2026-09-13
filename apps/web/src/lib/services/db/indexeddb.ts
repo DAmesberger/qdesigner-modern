@@ -125,6 +125,8 @@ export interface FilloutSession {
   // `sessions.state_snapshot` on the server for cross-device resume.
   resumeState?: ResumeState;
   updatedAt?: number;
+  /** Shared transport backoff across upload engines, tabs and reloads; not indexed. */
+  syncRetryAt?: number;
   synced: 0 | 1;
 }
 

@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import MediaManagerModal from '$lib/components/designer/MediaManagerModal.svelte';
-  import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import ResizablePanes from '$lib/components/designer/reaction/ResizablePanes.svelte';
   import type { MediaAsset } from '$lib/shared/types/media';
   import { mediaService } from '$lib/services/mediaService';
@@ -49,7 +48,6 @@
   let assetPickerMode = $state<'library' | 'assign-selected-trial'>('library');
   let loadingAssets = $state(false);
   let projectAssets = $state<ReactionExperimentAssetRef[]>([]);
-  let scriptEditorOpen = $state(false);
 
   const activeBlock = $derived(
     config.blocks.find((block) => block.id === selectedBlockId) || config.blocks[0] || null
@@ -138,10 +136,6 @@
       return trial.stimulus.kind;
     }
     return 'text';
-  }
-
-  function hasScript() {
-    return typeof question?.settings?.script === 'string' && question.settings.script.trim().length > 0;
   }
 
   function syncFromQuestion(force = false) {
@@ -403,15 +397,6 @@
         assetPickerMode = 'library';
       });
   }
-
-  function saveScript(script: string) {
-    onupdate?.({
-      settings: {
-        ...(question?.settings || {}),
-        script,
-      },
-    });
-  }
 </script>
 
 <div class="h-full min-h-0" data-testid="reaction-lab-workspace">
@@ -529,8 +514,6 @@
           {updateSelectedBlock}
           {updateSelectedTrial}
           {onTrialCommit}
-          hasScript={hasScript()}
-          onOpenScript={() => (scriptEditorOpen = true)}
           onChooseMedia={() => openAssetPicker('assign-selected-trial')}
           onOpenAssetBin={() => (activeLeftTab = 'assets')}
         />
@@ -548,15 +531,4 @@
     onclose={() => (showAssetPicker = false)}
   />
 
-  {#if scriptEditorOpen}
-    <ScriptEditorOverlay
-      {question}
-      variables={designerStore.questionnaire.variables}
-      onclose={() => (scriptEditorOpen = false)}
-      onsave={(script) => {
-        saveScript(script);
-        scriptEditorOpen = false;
-      }}
-    />
-  {/if}
 </div>

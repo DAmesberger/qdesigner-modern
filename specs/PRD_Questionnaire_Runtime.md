@@ -11,8 +11,8 @@ The Questionnaire Runtime System is the participant-facing component of QDesigne
 ### 1.2 Core Capabilities
 
 - **Hybrid Rendering**: WebGL for high-precision stimuli (images, videos) and HTML for standard form inputs
-- **Advanced Templating**: JavaScript template literals with full expression support
-- **Comprehensive Scripting**: Sandboxed JavaScript execution with Monaco editor integration
+- **Advanced Templating**: Variable piping and constrained formula expressions
+- **Safe Logic**: Typed expressions and rules; full hook support remains outstanding
 - **Interaction Tracking**: Every click, keypress, and time measurement stored with microsecond precision
 - **Offline-First**: Full offline capability with intelligent sync and conflict resolution
 - **GDPR Compliant**: Field-level encryption and EU regulation compliance
@@ -341,69 +341,11 @@ interface TemplateEngine {
 // Loop: ${foreach items as item}${item.name}${/foreach}
 ```
 
-### 5.3 Script Engine
+### 5.3 Safe Logic Runtime
 
-```typescript
-interface ScriptEngine {
-  // Sandboxed execution
-  execute(script: string, context: ScriptContext): any;
+Questionnaire-authored hooks execute only the typed `qexpr/1` expression and `qrule/1` rule model. The runtime shares evaluation and validation with the Definition module and deterministic tests. Effects use allowlisted, capability-controlled adapters.
 
-  // Built-in functions
-  functions: BuiltInFunctions;
-
-  // Monaco editor integration
-  getCompletions(): MonacoCompletion[];
-  validate(script: string): ValidationResult;
-}
-
-interface BuiltInFunctions {
-  // Math functions
-  sum(array: number[]): number;
-  avg(array: number[]): number;
-  min(array: number[]): number;
-  max(array: number[]): number;
-  round(value: number, decimals?: number): number;
-
-  // String functions
-  concat(...strings: string[]): string;
-  upper(str: string): string;
-  lower(str: string): string;
-  trim(str: string): string;
-
-  // Date/Time functions
-  now(): Date;
-  formatDate(date: Date, format: string): string;
-  diffTime(start: Date, end: Date, unit: string): number;
-
-  // Array functions
-  filter(array: any[], predicate: Function): any[];
-  map(array: any[], transform: Function): any[];
-  find(array: any[], predicate: Function): any;
-
-  // Questionnaire functions
-  getResponse(questionId: string): any;
-  setResponse(questionId: string, value: any): void;
-  skipTo(questionId: string): void;
-  showQuestion(questionId: string): void;
-  hideQuestion(questionId: string): void;
-
-  // Random functions
-  random(): number;
-  randomInt(min: number, max: number): number;
-  shuffle(array: any[]): any[];
-
-  // Storage functions
-  store(key: string, value: any): void;
-  retrieve(key: string): any;
-
-  // External device functions (future)
-  device: {
-    isConnected(deviceType: string): boolean;
-    sendTrigger(deviceId: string, value: any): void;
-    readValue(deviceId: string): any;
-  };
-}
-```
+[ADR 0039](../docs/decisions/0039-safe-logic-only-and-qdef-boundary.md) removes legacy JavaScript execution immediately; definitions containing JavaScript hooks fail before execution. Full Safe Logic hook support remains outstanding, with no JavaScript compatibility fallback.
 
 ## 6. Navigation & Flow Control
 
@@ -533,7 +475,7 @@ interface StorageManager {
   // Local storage (IndexedDB)
   local: LocalStorage;
 
-  // Remote storage (Supabase)
+  // Remote storage (Rust REST API backed by PostgreSQL and S3-compatible storage)
   remote: RemoteStorage;
 
   // Sync management

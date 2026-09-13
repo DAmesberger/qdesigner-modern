@@ -1,4 +1,8 @@
-use axum::{extract::Request, extract::State, middleware::Next, response::Response};
+use axum::{
+    extract::{Path, Request, State},
+    middleware::Next,
+    response::{IntoResponse, Response},
+};
 use redis::AsyncCommands;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -208,6 +212,63 @@ pub async fn session_create_rate_limit_middleware(
     let key = rate_limit_key(&request, state.config.trusted_proxy_hops);
     enforce(&state.session_create_limiter, key).await?;
     Ok(next.run(request).await)
+}
+
+/// A page reload reads an existing session; it is not a login attempt. Keep its
+/// IP budget separate and bounded, including for anonymous status checks.
+pub async fn auth_session_rate_limit_middleware(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let key = format!(
+        "auth-session:{}",
+        client_ip(&request, state.config.trusted_proxy_hops)
+    );
+    if !state.auth_session_limiter.check(&key).await {
+        let mut response = ApiError::RateLimited.into_response();
+        response.headers_mut().insert(
+            axum::http::header::RETRY_AFTER,
+            state
+                .auth_session_limiter
+                .window_secs
+                .to_string()
+                .parse()
+                .expect("positive session window is a valid header"),
+        );
+        return response;
+    }
+    next.run(request).await
+}
+
+/// Answer delivery is bounded per session, never by the lab's shared IP/auth
+/// budget. The prefix also isolates distributed Redis counters from other routes.
+/// This changes throughput only: the handler still owns publication, session and
+/// independent RLS checks, and the route retains its body-size limit.
+pub async fn session_sync_rate_limit_middleware(
+    State(state): State<AppState>,
+    Path(session_id): Path<uuid::Uuid>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if !state
+        .session_sync_limiter
+        .check(&format!("sync:{session_id}"))
+        .await
+    {
+        let mut response = ApiError::RateLimited.into_response();
+        response.headers_mut().insert(
+            axum::http::header::RETRY_AFTER,
+            state
+                .session_sync_limiter
+                .window_secs
+                .to_string()
+                .parse()
+                .expect("positive sync window is a valid header"),
+        );
+        return response;
+    }
+    next.run(request).await
 }
 
 /// Per-IP budget on the anonymous session-media upload route

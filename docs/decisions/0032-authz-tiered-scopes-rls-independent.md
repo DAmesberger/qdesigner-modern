@@ -5,6 +5,8 @@ Status: accepted (2026-07-13, grilling session). Continues ADR 0030 (whose
 RLS stays a defense-in-depth net, but authorization decisions are now
 **independent** of it. Motivated by a live regression — see below.
 
+**Implementation reconciliation (2026-09-11):** tiered project authorization and the org override are implemented (migrations 00051–00053). [ADR 0033](0033-cross-org-project-membership-replaces-shares.md) supersedes the resource-share admission branches and migration-00050 requirement below. The [live ledger](0030-divergence-ledger.md) tracks remaining exceptions; the original sweep counts below describe July context.
+
 ## Context
 
 Three gaps in ADR 0030's `authorize()`, two named on its own divergence
