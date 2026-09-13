@@ -347,11 +347,27 @@ async fn replacement_audit_failure_rolls_back_definition_snapshot_generation_and
     }))).await;
     assert_eq!(status, StatusCode::OK, "{created:?}");
     let id = created["questionnaireId"].as_str().unwrap();
+    let questionnaire_uri = format!("/api/projects/{}/questionnaires/{id}", tenant.project_id);
+    let (_, native) = json_request(&app, "GET", &questionnaire_uri, Some(&user.token), None).await;
+    let mut content = native["content"].clone();
+    content["variables"] =
+        json!([{"id": "score", "name": "score", "type": "number", "formula": "1"}]);
+    let (status, saved) = json_request(
+        &app,
+        "PATCH",
+        &questionnaire_uri,
+        Some(&user.token),
+        Some(&json!({"content": content})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved:?}");
+    let before_projections = stored_variable_projections(id).await;
+    assert_eq!(before_projections.len(), 1);
     let versions_uri = format!("/api/questionnaires/{id}/versions");
     let (_, before_versions) =
         json_request(&app, "GET", &versions_uri, Some(&user.token), None).await;
     let input = json!({"definition": definition("After failed replacement").to_string(), "questionnaireId": id,
-        "expectedRevision": 1, "commit": true, "idempotencyKey": "retry-after-audit-failure"});
+        "expectedRevision": 2, "commit": true, "idempotencyKey": "retry-after-audit-failure"});
     let (_, before) = json_request(&app, "GET", &list_uri, Some(&user.token), None).await;
 
     // Inject a repository failure scoped to this synthetic actor. Other tests'
@@ -382,6 +398,11 @@ async fn replacement_audit_failure_rolls_back_definition_snapshot_generation_and
             versions, before_versions,
             "failed replacement leaves no snapshot"
         );
+        assert_eq!(
+            stored_variable_projections(id).await,
+            before_projections,
+            "failed replacement restores the prior variable projection"
+        );
         let (_, timeline) = json_request(&app, "GET", &audit_uri, Some(&user.token), None).await;
         assert!(timeline["events"].as_array().unwrap().is_empty());
     })
@@ -402,7 +423,8 @@ async fn replacement_audit_failure_rolls_back_definition_snapshot_generation_and
     let (status, retried) = json_request(&app, "POST", &uri, Some(&user.token), Some(&input)).await;
     assert_eq!(status, StatusCode::OK, "retry: {retried:?}");
     assert_eq!(retried["committed"], true);
-    assert_eq!(retried["revision"], 2);
+    assert_eq!(retried["revision"], 3);
+    assert!(stored_variable_projections(id).await.is_empty());
     let (_, timeline) = json_request(&app, "GET", &audit_uri, Some(&user.token), None).await;
     assert_eq!(timeline["events"].as_array().unwrap().len(), 1);
 }
@@ -420,13 +442,27 @@ async fn a_native_draft_outside_export_capabilities_can_be_replaced_without_losi
         "name": "Existing native form", "description": "Preserve all historical behavior",
         "content": {"pages": [{"id": "page", "blocks": [{"id": "block", "type": "standard", "questions": ["choice"]}]}],
             "questions": [{"id": "choice", "type": "multiple-choice", "required": true,
-                "display": {"prompt": "Choose an answer"}, "config": {"options": [{"id": "yes", "label": "Yes", "value": "yes"}]}}], "variables": [], "flow": []},
+                "display": {"prompt": "Choose an answer"}, "config": {"options": [{"id": "yes", "label": "Yes", "value": "yes"}]}}], "variables": [{"id": "score", "name": "score", "type": "number", "formula": "1"}], "flow": []},
         "settings": {"showProgressBar": true, "language": "de"}
     }))).await;
     assert_eq!(status, StatusCode::CREATED, "{before:?}");
     let id = before["id"].as_str().unwrap();
-    let input = json!({"definition": definition("New portable draft").to_string(), "questionnaireId": id,
-        "expectedRevision": 1, "commit": true, "idempotencyKey": "replace-native"});
+    let historical_projections = stored_variable_projections(id).await;
+    assert_eq!(historical_projections.len(), 1);
+    let (status, before) = json_request(
+        &app,
+        "POST",
+        &format!("{create_uri}/{id}/bump-version"),
+        Some(&owner.token),
+        Some(&json!({"bump_type": "minor"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{before:?}");
+    assert_eq!(stored_variable_projections(id).await.len(), 2);
+    let mut incoming = definition("New portable draft");
+    incoming["questionnaire"]["version"] = json!("1.1.0");
+    let input = json!({"definition": incoming.to_string(), "questionnaireId": id,
+        "expectedRevision": before["version"], "commit": true, "idempotencyKey": "replace-native"});
     let (status, replaced) = json_request(
         &app,
         "POST",
@@ -443,7 +479,12 @@ async fn a_native_draft_outside_export_capabilities_can_be_replaced_without_losi
         StatusCode::OK,
         "The prior definition need not be exportable to snapshot it: {replaced:?}"
     );
-    assert_eq!(replaced["revision"], 2);
+    assert_eq!(replaced["revision"], 3);
+    assert_eq!(
+        stored_variable_projections(id).await,
+        historical_projections,
+        "Remove only destination-version projections; preserve historical versions"
+    );
     let (_, versions) = json_request(
         &app,
         "GET",
@@ -452,7 +493,7 @@ async fn a_native_draft_outside_export_capabilities_can_be_replaced_without_losi
         None,
     )
     .await;
-    assert_eq!(versions.as_array().unwrap().len(), 1);
+    assert_eq!(versions.as_array().unwrap().len(), 2);
     assert_eq!(versions[0]["content"], before["content"]);
     assert_eq!(versions[0]["settings"], before["settings"]);
     assert_eq!(versions[0]["title"], before["name"]);
@@ -467,4 +508,12 @@ async fn a_native_draft_outside_export_capabilities_can_be_replaced_without_losi
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(after["digest"], replaced["digest"]);
+}
+
+// HTTP writes are verified against their durable projection, including identities
+// and timestamps, so both stale rows and destructive historical rewrites fail.
+async fn stored_variable_projections(id: &str) -> Vec<serde_json::Value> {
+    let pool = common::fixture_pool().await.expect("test database");
+    sqlx::query_scalar("SELECT to_jsonb(v) FROM questionnaire_variable_definitions v WHERE questionnaire_id=$1 ORDER BY version_major,version_minor,version_patch,variable_name")
+        .bind(uuid::Uuid::parse_str(id).unwrap()).fetch_all(&pool).await.unwrap()
 }

@@ -4,9 +4,11 @@
 //! maintaining their own serializers or validators.
 
 mod persistence;
+mod projections;
 mod safety;
 
 pub(crate) use persistence::snapshot_questionnaire_version;
+pub(crate) use projections::reconcile_variable_projection;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

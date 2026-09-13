@@ -181,6 +181,7 @@ pub(super) async fn apply_validated(
         }
         return Err(ApiError::from_db_error(failure));
     }
+    super::reconcile_variable_projection(&mut tx, id, version, &content).await?;
     audit::record(&mut tx, AuditEvent {
         organization_id, actor_user_id: actor,
         action: if input.target.is_some() { AuditAction::QuestionnaireDefinitionReplaced } else { AuditAction::QuestionnaireDefinitionImported },

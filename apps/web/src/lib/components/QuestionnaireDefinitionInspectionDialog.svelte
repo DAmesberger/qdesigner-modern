@@ -21,7 +21,7 @@
     onreplaced,
   }: Props = $props();
   let inspecting = $state(false);
-  let creating = $state(false);
+  let applying = $state(false);
   let source = $state('');
   let idempotencyKey = $state('');
   let filename = $state('');
@@ -42,7 +42,7 @@
   async function inspectFile(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file || inspecting || creating) return;
+    if (!file || inspecting || applying) return;
 
     filename = file.name;
     localError = '';
@@ -73,9 +73,9 @@
     }
   }
 
-  async function createDraft() {
-    if (!result?.valid || result.committed || creating || inspecting) return;
-    creating = true;
+  async function applyDefinitionChange() {
+    if (!result?.valid || result.committed || applying || inspecting) return;
+    applying = true;
     localError = '';
     try {
       if (replaceQuestionnaireId && expectedRevision === null) return;
@@ -96,9 +96,9 @@
       localError =
         error instanceof Error
           ? error.message
-          : 'The draft could not be created. Retry to check its outcome.';
+          : 'The definition change could not be confirmed. Retry to check its outcome.';
     } finally {
-      creating = false;
+      applying = false;
     }
   }
 
@@ -142,7 +142,7 @@
         type="file"
         accept=".qdef.json,application/json,application/vnd.qdesigner.questionnaire+json"
         onchange={inspectFile}
-        disabled={inspecting || creating}
+        disabled={inspecting || applying}
         class="mt-3 block w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-primary-foreground"
         testid="qdef-file-input"
       />
@@ -261,7 +261,7 @@
   </div>
 
   {#snippet footer()}
-    <Button variant="outline" onclick={close} disabled={creating}>Close</Button>
+    <Button variant="outline" onclick={close} disabled={applying}>Close</Button>
     {#if replaceQuestionnaireId && result?.diagnostics.some((d) => d.code === 'REVISION_CONFLICT')}
       <p class="text-sm" data-testid="qdef-revision-conflict-guidance">
         The current server revision is {result.revision}. Reload the draft, review it, then select
@@ -270,7 +270,7 @@
       <Button onclick={() => window.location.reload()}>Reload Current Draft</Button>
     {/if}
     {#if (oncreated || replaceQuestionnaireId) && result?.valid && !result.committed}
-      <Button onclick={createDraft} disabled={creating || inspecting} loading={creating}
+      <Button onclick={applyDefinitionChange} disabled={applying || inspecting} loading={applying}
         >{replaceQuestionnaireId ? 'Replace Draft' : 'Create Draft'}</Button
       >
     {/if}
