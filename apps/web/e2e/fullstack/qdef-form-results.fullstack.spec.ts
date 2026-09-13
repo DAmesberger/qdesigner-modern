@@ -29,6 +29,7 @@ test('@fullstack an imported form preserves configuration and persists exact ans
   browser,
 }) => {
   test.setTimeout(180000);
+  page.setDefaultTimeout(15000);
   const workspace = await provisionWorkspace(request);
   const definition = portableFormDefinition(`Imported participant form ${Date.now()}`);
   await installAuthSession(page, workspace);
@@ -57,7 +58,13 @@ test('@fullstack an imported form preserves configuration and persists exact ans
   );
   expect(exported.status(), await exported.text()).toBe(200);
   expect((await exported.json()).digest).toBe(preview.digest);
-  await page.getByTestId('designer-question-number').click();
+  // Click where a researcher sees the answer preview. A disabled input must not
+  // swallow the selection click; locator.click() deliberately disallows disabled controls.
+  const numberPreview = page.getByTestId('designer-question-number').locator('input:disabled');
+  await numberPreview.scrollIntoViewIfNeeded();
+  const bounds = await numberPreview.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.click(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
   await page.getByLabel('Minimum', { exact: true }).fill('');
   await saveAndReload(designer);
   const edited = await request.get(
