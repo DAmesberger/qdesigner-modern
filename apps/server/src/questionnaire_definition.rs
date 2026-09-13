@@ -50,11 +50,7 @@ pub trait DefinitionAccess {
         questionnaire_id: Uuid,
     ) -> Result<Option<StoredQuestionnaire>, ApiError>;
 
-    async fn create(&mut self, _input: CreateDefinition) -> Result<ApplyResult, ApiError> {
-        Err(ApiError::Internal(
-            "Definition repository does not support writes".into(),
-        ))
-    }
+    async fn create(&mut self, input: CreateDefinition) -> Result<ApplyResult, ApiError>;
 }
 
 /// A validated creation command. Only the Definition Module constructs it;

@@ -69,7 +69,6 @@ fn block_to_prelim(block: &Value) -> MapPrelim {
     let mut entries: Vec<(String, In)> = vec![
         ("id".to_string(), str_in(&str_field(block, "id"))),
         ("pageId".to_string(), str_in(&str_field(block, "pageId"))),
-        ("name".to_string(), str_in(&str_field(block, "name"))),
         (
             "type".to_string(),
             str_in(
@@ -80,6 +79,10 @@ fn block_to_prelim(block: &Value) -> MapPrelim {
             ),
         ),
     ];
+
+    if let Some(name) = block.get("name").and_then(Value::as_str) {
+        entries.push(("name".to_string(), str_in(name)));
+    }
 
     // `questions`: Y.Array<string> of question ids.
     let question_ids: Vec<In> = block
@@ -106,10 +109,10 @@ fn block_to_prelim(block: &Value) -> MapPrelim {
 
 /// Mirror of `pageToYMap`: a page as a nested `Y.Map`.
 fn page_to_prelim(page: &Value) -> MapPrelim {
-    let mut entries: Vec<(String, In)> = vec![
-        ("id".to_string(), str_in(&str_field(page, "id"))),
-        ("name".to_string(), str_in(&str_field(page, "name"))),
-    ];
+    let mut entries: Vec<(String, In)> = vec![("id".to_string(), str_in(&str_field(page, "id")))];
+    if let Some(name) = page.get("name").and_then(Value::as_str) {
+        entries.push(("name".to_string(), str_in(name)));
+    }
 
     let blocks: Vec<In> = page
         .get("blocks")
@@ -155,11 +158,9 @@ pub fn seed_doc_from_content(doc: &Doc, content: &Value) {
     // ── meta ────────────────────────────────────────────────────────────────
     meta.insert(&mut txn, "id", str_in(&str_field(content, "id")));
     meta.insert(&mut txn, "name", str_in(&str_field(content, "name")));
-    meta.insert(
-        &mut txn,
-        "description",
-        str_in(&str_field(content, "description")),
-    );
+    if let Some(description) = content.get("description").and_then(Value::as_str) {
+        meta.insert(&mut txn, "description", str_in(description));
+    }
     meta.insert(
         &mut txn,
         "version",

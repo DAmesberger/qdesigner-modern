@@ -1,7 +1,7 @@
 use qdesigner_server::error::ApiError;
 use qdesigner_server::questionnaire_definition::{
-    ApplyInput, DefinitionAccess, DefinitionCapability, DefinitionReadFailure,
-    QuestionnaireDefinition, ReadInput, StoredQuestionnaire,
+    ApplyInput, ApplyResult, CreateDefinition, DefinitionAccess, DefinitionCapability,
+    DefinitionReadFailure, QuestionnaireDefinition, ReadInput, StoredQuestionnaire,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -14,6 +14,9 @@ struct FakeAccess {
 }
 
 impl DefinitionAccess for FakeAccess {
+    async fn create(&mut self, _input: CreateDefinition) -> Result<ApplyResult, ApiError> {
+        panic!("Validation-only contract must not reach persistence");
+    }
     async fn authorize(
         &mut self,
         _project_id: Uuid,
@@ -605,6 +608,45 @@ async fn executable_aliases_cannot_hide_in_nested_module_configuration() {
             "missing executable diagnostic for {path}: {:?}",
             result.diagnostics
         );
+    }
+}
+
+#[tokio::test]
+async fn retired_lifecycle_names_cannot_be_imported_as_nested_configuration() {
+    let (project_id, _) = ids();
+    for name in [
+        "onMount",
+        "onNavigate",
+        "onPageEnter",
+        "onPageExit",
+        "onTimer",
+        "ON_PAGE_ENTER",
+        "on-mount",
+    ] {
+        let mut definition = minimal_definition();
+        definition["questions"]["copy"]["config"] =
+            json!({"nested": {name: "import('/plugin.js')"}});
+        for commit in [false, true] {
+            let result = QuestionnaireDefinition::new(FakeAccess::default())
+                .apply(ApplyInput {
+                    project_id,
+                    definition: definition.to_string(),
+                    commit,
+                    idempotency_key: Some("retired-hook".into()),
+                })
+                .await
+                .unwrap();
+            assert!(
+                !result.valid,
+                "Retired lifecycle name {name} passed inspection"
+            );
+            assert!(!result.committed);
+            assert!(result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "UNSAFE_EXECUTABLE"
+                    && d.path == format!("/questions/copy/config/nested/{name}")));
+        }
     }
 }
 
