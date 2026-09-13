@@ -3,6 +3,8 @@
 //! HTTP, UI, and future MCP adapters must cross this interface instead of
 //! maintaining their own serializers or validators.
 
+mod safety;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -563,7 +565,8 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
             }
         };
 
-        let envelope_diagnostics = validate_envelope(&raw_definition);
+        let mut envelope_diagnostics = validate_envelope(&raw_definition);
+        safety::inspect(&raw_definition, "", &mut envelope_diagnostics);
         if has_errors(&envelope_diagnostics) {
             return Ok(invalid(envelope_diagnostics));
         }
@@ -617,6 +620,8 @@ fn document_from_stored(
     stored: StoredQuestionnaire,
 ) -> Result<QDefDocument, Vec<DefinitionDiagnostic>> {
     let mut diagnostics = Vec::new();
+    safety::inspect(&stored.content, "/content", &mut diagnostics);
+    safety::inspect(&stored.settings, "/settings", &mut diagnostics);
     let content = match stored.content.as_object() {
         Some(content) => content,
         None => {
@@ -964,6 +969,23 @@ fn validate_envelope(definition: &Value) -> Vec<DefinitionDiagnostic> {
 
 fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
     let mut diagnostics = Vec::new();
+    for (field, nonempty) in [
+        ("assets", !document.assets.is_empty()),
+        ("variables", !document.variables.is_empty()),
+        ("flow", !document.flow.is_empty()),
+        ("rules", !document.rules.is_empty()),
+        ("translations", !document.translations.is_empty()),
+        ("extensions", !document.extensions.is_empty()),
+    ] {
+        if nonempty {
+            diagnostics.push(error(
+                "QDEF_CAPABILITY_UNSUPPORTED",
+                format!("/{field}"),
+                format!("Nonempty '{field}' is outside the text-only QDef tracer."),
+                Some("Keep this capability empty until its QDef implementation is delivered."),
+            ));
+        }
+    }
     let mut page_ids = BTreeSet::new();
     let mut block_ids = BTreeSet::new();
     let mut referenced_questions = BTreeSet::new();

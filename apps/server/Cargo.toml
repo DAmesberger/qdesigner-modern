@@ -63,6 +63,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # returns a 422 "pending" until an operator opts into real DNS proof by
 # building with `--features dns-verify`.
 hickory-resolver = { version = "0.24", optional = true }
+html5ever = "0.35"
 
 [features]
 # Enable a live DNS TXT lookup at `_qdesigner-verify.<domain>` for domain

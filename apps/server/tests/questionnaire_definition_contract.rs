@@ -365,3 +365,167 @@ async fn wrongly_typed_stored_optional_scalars_are_not_silently_normalized() {
     assert!(paths.contains(&"/content/pages/0/blocks/0/name"));
     assert!(paths.contains(&"/content/pages/0/blocks/0/type"));
 }
+
+fn minimal_definition() -> serde_json::Value {
+    json!({
+        "$schema": "https://schemas.qdesigner.dev/questionnaire/1.0.0",
+        "format": "qdesigner.questionnaire", "formatVersion": "1.0.0",
+        "questionnaire": {"name": "Inspection", "version": "1.0.0"},
+        "assets": {}, "variables": {}, "questions": {
+            "copy": {"type": "text-display", "required": false, "display": {"content": "Welcome"}}
+        },
+        "structure": {"pages": [{"id": "page", "blocks": [
+            {"id": "block", "type": "standard", "questionIds": ["copy"]}
+        ]}]},
+        "flow": [], "rules": [], "settings": {}, "translations": {}, "extensions": {}
+    })
+}
+
+#[tokio::test]
+async fn executable_payloads_are_rejected_at_the_inspection_boundary() {
+    let cases = [
+        (
+            "/rules",
+            json!([{"language": "javascript", "script": "alert(1)"}]),
+            "/rules/0/language",
+        ),
+        (
+            "/questions/copy/display/content",
+            json!("<img src=x onerror='alert(1)'>"),
+            "/questions/copy/display/content",
+        ),
+        (
+            "/questions/copy/display/content",
+            json!("<a href='java&#x73;cript:alert(1)'>go</a>"),
+            "/questions/copy/display/content",
+        ),
+        (
+            "/questions/copy/display/content",
+            json!("<ScRiPt>alert(1)</ScRiPt>"),
+            "/questions/copy/display/content",
+        ),
+        (
+            "/questions/copy/display",
+            json!({"content": "ok", "hooks": {"onEnter": "alert(1)"}}),
+            "/questions/copy/display/hooks",
+        ),
+        (
+            "/extensions",
+            json!({"custom": {"global_scripts": ["alert(1)"]}}),
+            "/extensions/custom/global_scripts",
+        ),
+    ];
+    let (project_id, _) = ids();
+    for (field, payload, expected_path) in cases {
+        let mut document = minimal_definition();
+        *document.pointer_mut(field).unwrap() = payload;
+        let result = QuestionnaireDefinition::new(FakeAccess::default())
+            .apply(ApplyInput {
+                project_id,
+                definition: document.to_string(),
+                commit: false,
+            })
+            .await
+            .unwrap();
+        assert!(!result.valid, "executable payload accepted at {field}");
+        assert!(result.canonical.is_none());
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "UNSAFE_EXECUTABLE" && d.path == expected_path),
+            "missing diagnostic at {expected_path}: {:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[tokio::test]
+async fn unsupported_tracer_capabilities_do_not_receive_a_valid_digest() {
+    let (project_id, _) = ids();
+    for field in [
+        "assets",
+        "variables",
+        "flow",
+        "rules",
+        "translations",
+        "extensions",
+    ] {
+        let mut document = minimal_definition();
+        document[field] = if matches!(field, "flow" | "rules") {
+            json!([{"safe": true}])
+        } else {
+            json!({"entry": {"safe": true}})
+        };
+        let result = QuestionnaireDefinition::new(FakeAccess::default())
+            .apply(ApplyInput {
+                project_id,
+                definition: document.to_string(),
+                commit: false,
+            })
+            .await
+            .unwrap();
+        assert!(!result.valid, "unsupported {field} was accepted");
+        assert!(result.digest.is_none());
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_CAPABILITY_UNSUPPORTED" && d.path == format!("/{field}")));
+    }
+}
+
+#[tokio::test]
+async fn passive_html_and_literal_script_discussion_remain_portable_text() {
+    let (project_id, _) = ids();
+    let mut document = minimal_definition();
+    document["questions"]["copy"]["display"]["content"] =
+        json!("<p>A &amp; B discuss JavaScript: <em>eval()</em> is text.</p>");
+    let result = QuestionnaireDefinition::new(FakeAccess::default())
+        .apply(ApplyInput {
+            project_id,
+            definition: document.to_string(),
+            commit: false,
+        })
+        .await
+        .unwrap();
+    assert!(result.valid, "{:?}", result.diagnostics);
+    let canonical: serde_json::Value =
+        serde_json::from_str(result.canonical.as_ref().unwrap()).unwrap();
+    assert_eq!(canonical["questions"], document["questions"]);
+}
+
+#[tokio::test]
+async fn stored_executable_text_is_rejected_before_export() {
+    let (project_id, questionnaire_id) = ids();
+    let mut definitions = QuestionnaireDefinition::new(FakeAccess {
+        stored: Some(StoredQuestionnaire {
+            name: "Unsafe stored copy".into(),
+            description: None,
+            revision: 1,
+            version_major: 1,
+            version_minor: 0,
+            version_patch: 0,
+            content: json!({"questions": [{"id": "copy", "type": "text-display",
+                "display": {"content": "<img src=x onerror='alert(1)'>"}}], "pages": []}),
+            settings: json!({}),
+        }),
+        ..Default::default()
+    });
+    let failure = definitions
+        .read(ReadInput {
+            project_id,
+            questionnaire_id,
+        })
+        .await
+        .unwrap_err();
+    let DefinitionReadFailure::Invalid(error) = failure else {
+        panic!("expected content rejection");
+    };
+    assert!(
+        error
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "UNSAFE_EXECUTABLE"
+                && d.path == "/content/questions/0/display/content")
+    );
+}
