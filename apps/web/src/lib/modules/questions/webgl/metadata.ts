@@ -1,23 +1,8 @@
-// WebGL question metadata
-
 import type { ModuleMetadata } from '$lib/modules/types';
-import { AnswerTypes } from '../shared/answerTypes';
-import { createDefaultWebGLConfig } from './model/webgl-config';
+import { getModuleDefinition } from '@qdesigner/questionnaire-core';
 
 export const metadata: ModuleMetadata = {
-  type: 'webgl',
-  category: 'question',
-  name: 'WebGL Stimulus',
-  icon: '🎮',
-  description: 'High-performance GPU-rendered stimuli with frame-accurate onset timing',
-  capabilities: {
-    supportsScripting: true,
-    supportsConditionals: true,
-    supportsValidation: true,
-    supportsAnalytics: true,
-    supportsTiming: true,
-    supportsVariables: true,
-  },
+  ...getModuleDefinition('webgl'),
   components: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     runtime: () => import('./WebGL.svelte') as any,
@@ -31,6 +16,4 @@ export const metadata: ModuleMetadata = {
       return new WebGLRuntime();
     },
   },
-  defaultConfig: createDefaultWebGLConfig(),
-  answerType: AnswerTypes.REACTION_TIME,
 };

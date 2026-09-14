@@ -8,7 +8,7 @@ import {
   compileReactionPlan,
   type ReactionCompileContext,
 } from '$lib/modules/questions/reaction-time/model/reaction-compiler';
-import { normalizeReactionQuestionConfig } from '$lib/modules/questions/reaction-time/model/reaction-normalize';
+import { normalizeReactionQuestionConfig, optionalFrameCount } from '$lib/modules/questions/reaction-time/model/reaction-normalize';
 import { createReactionStudyStarter } from '$lib/modules/questions/reaction-time/model/starter-templates';
 import type {
   PlannedReactionTrial,
@@ -303,14 +303,14 @@ export function createTrial(blockId: string, index: number): ReactionExperimentT
 
 export function normalizeReactionExperimentConfig(questionLike: unknown): ReactionExperimentConfig {
   const root = toRecord(questionLike);
-  const config = toRecord(root.config);
+  const config = { ...toRecord(root.display), ...toRecord(root.config) };
   const defaults = createDefaultReactionExperimentConfig(
     normalizeTemplate(toRecord(config.metadata).template)
   );
 
   const metadata = toRecord(config.metadata);
   const stage = toRecord(config.stage);
-  const response = toRecord(config.response);
+  const response = { ...toRecord(root.response), ...toRecord(root.responseType), ...toRecord(config.response) };
   const feedback = toRecord(config.feedback);
   const randomization = toRecord(config.randomization);
   const counterbalancing = toRecord(randomization.counterbalancing);
@@ -785,6 +785,8 @@ function normalizeBlocks(value: unknown, fallback: ReactionExperimentBlock[]) {
 function normalizeBlock(value: unknown, fallback: ReactionExperimentBlock): ReactionExperimentBlock | null {
   const record = toRecord(value);
   const trials = Array.isArray(record.trials) ? record.trials : fallback.trials;
+  const criterion = toRecord(record.practiceCriterion);
+  const minAccuracy = asOptionalNumber(criterion.minAccuracy);
 
   return {
     id: asString(record.id, fallback.id),
@@ -795,6 +797,10 @@ function normalizeBlock(value: unknown, fallback: ReactionExperimentBlock): Reac
         : fallback.kind,
     randomizeOrder: asBoolean(record.randomizeOrder, fallback.randomizeOrder ?? false),
     repetitions: clamp(asNumber(record.repetitions, fallback.repetitions || 1), 1, 50),
+    ...(minAccuracy !== undefined ? { practiceCriterion: {
+      minAccuracy: clamp(minAccuracy, 0, 1),
+      maxAttempts: clamp(Math.round(asNumber(criterion.maxAttempts, 3)), 1, 20),
+    } } : {}),
     trials: trials
       .map((trial, index) => {
         const baseFallback = fallback.trials[index] ?? fallback.trials[0];
@@ -856,6 +862,7 @@ function normalizePhases(value: unknown, fallback: ScheduledPhase[]) {
     return {
       name: asString(record.name, `phase-${index + 1}`),
       durationMs: clamp(asNumber(record.durationMs, 250), 0, 30000),
+      ...(optionalFrameCount(record.durationFrames) !== undefined ? { durationFrames: optionalFrameCount(record.durationFrames) } : {}),
       allowResponse: asBoolean(record.allowResponse, false),
       marksStimulusOnset: asBoolean(record.marksStimulusOnset, false),
     } satisfies ScheduledPhase;

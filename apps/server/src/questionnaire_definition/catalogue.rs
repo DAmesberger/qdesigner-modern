@@ -18,6 +18,27 @@ struct ModuleRules {
     ordered_bounds: Vec<OrderedBounds>,
     unique_item_keys: Vec<UniqueItemKeys>,
     date_values: Vec<String>,
+    ordered_value_pairs: Vec<OrderedValuePair>,
+    item_references: Vec<ItemReferences>,
+    effective_reaction_response: bool,
+}
+
+#[derive(Deserialize)]
+struct OrderedValuePair {
+    path: String,
+    lower: String,
+    upper: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ItemReferences {
+    path: String,
+    field: String,
+    collection: String,
+    key: String,
+    #[serde(default)]
+    fallback_collections: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -197,34 +218,199 @@ pub(super) fn validate(kind: &str, id: &str, question: &Value) -> Vec<Definition
         }
     }
     for rule in &validator.rules.unique_item_keys {
-        let Some(items) = question.pointer(&rule.path).and_then(Value::as_array) else {
-            continue;
-        };
-        let mut seen = BTreeMap::new();
-        for (index, item) in items.iter().enumerate() {
-            let Some(key) = item.get(&rule.key).and_then(Value::as_str) else {
+        for (collection_path, collection) in matching_values(question, &rule.path) {
+            let Some(items) = collection.as_array() else {
                 continue;
             };
-            if let Some(first) = seen.insert(key, index) {
-                let field = pointer_segment(&rule.key);
+            let mut seen = BTreeMap::new();
+            for (index, item) in items.iter().enumerate() {
+                let Some(key) = item.get(&rule.key).and_then(Value::as_str) else {
+                    continue;
+                };
+                if let Some(first) = seen.insert(key, index) {
+                    let field = pointer_segment(&rule.key);
+                    let mut diagnostic = error(
+                        "QDEF_CONFIG_INVALID",
+                        format!(
+                            "{path}/{}/{index}/{field}",
+                            collection_path.trim_start_matches('/')
+                        ),
+                        format!("The identifier '{key}' occurs more than once in this collection."),
+                        Some("Give each item a unique stable identifier."),
+                    );
+                    diagnostic.related_paths.push(format!(
+                        "{path}/{}/{first}/{field}",
+                        collection_path.trim_start_matches('/')
+                    ));
+                    diagnostics.push(diagnostic);
+                }
+            }
+        }
+    }
+    for rule in &validator.rules.ordered_value_pairs {
+        for (owner_path, owner) in matching_values(question, &rule.path) {
+            let (Some(lower), Some(upper)) = (
+                owner.get(&rule.lower).and_then(Value::as_f64),
+                owner.get(&rule.upper).and_then(Value::as_f64),
+            ) else {
+                continue;
+            };
+            if lower > upper {
                 let mut diagnostic = error(
                     "QDEF_CONFIG_INVALID",
-                    format!(
-                        "{path}/{}/{index}/{field}",
-                        rule.path.trim_start_matches('/')
-                    ),
-                    format!("The identifier '{key}' occurs more than once in this collection."),
-                    Some("Give each item a unique stable identifier."),
+                    format!("{path}{owner_path}/{}", pointer_segment(&rule.upper)),
+                    "The upper bound is below the lower bound.",
+                    Some("Choose an upper bound greater than or equal to the lower bound."),
                 );
                 diagnostic.related_paths.push(format!(
-                    "{path}/{}/{first}/{field}",
-                    rule.path.trim_start_matches('/')
+                    "{path}{owner_path}/{}",
+                    pointer_segment(&rule.lower)
                 ));
                 diagnostics.push(diagnostic);
             }
         }
     }
+    for rule in &validator.rules.item_references {
+        for (owner_path, owner) in matching_values(question, &rule.path) {
+            let Some(references) = owner.get(&rule.field).and_then(Value::as_array) else {
+                continue;
+            };
+            let primary_path = format!("{owner_path}/{}", rule.collection);
+            let collection = question
+                .pointer(&primary_path)
+                .map(|value| (primary_path.clone(), value))
+                .or_else(|| {
+                    rule.fallback_collections.iter().find_map(|candidate| {
+                        question
+                            .pointer(candidate)
+                            .map(|value| (candidate.clone(), value))
+                    })
+                });
+            for (index, reference) in references.iter().enumerate() {
+                let Some(reference) = reference.as_str() else {
+                    continue;
+                };
+                let exists = collection
+                    .as_ref()
+                    .and_then(|(_, value)| value.as_array())
+                    .is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item.get(&rule.key).and_then(Value::as_str) == Some(reference)
+                        })
+                    });
+                if !exists {
+                    let mut diagnostic = error("QDEF_CONFIG_INVALID", format!("{path}{owner_path}/{}/{index}", pointer_segment(&rule.field)), format!("The identifier '{reference}' does not name an item in the configured collection."), Some("Select an existing item identifier."));
+                    diagnostic.related_paths.push(format!(
+                        "{path}{}",
+                        collection
+                            .as_ref()
+                            .map_or(primary_path.as_str(), |(path, _)| path.as_str())
+                    ));
+                    diagnostics.push(diagnostic);
+                }
+            }
+        }
+    }
+    if validator.rules.effective_reaction_response {
+        validate_effective_reaction_response(question, &path, &mut diagnostics);
+    }
     diagnostics
+}
+
+/// Mirror the reaction normalizer's source selection without rewriting authored
+/// values. Correctness and response options can originate in different objects.
+fn validate_effective_reaction_response(
+    question: &Value,
+    path: &str,
+    diagnostics: &mut Vec<DefinitionDiagnostic>,
+) {
+    let root = if question.get("config").is_some_and(Value::is_object) {
+        "/config"
+    } else {
+        "/display"
+    };
+    let mut sources = vec![
+        format!("{root}/response"),
+        "/responseType".into(),
+        "/response".into(),
+    ];
+    if question.pointer(&format!("{root}/task")).is_none() {
+        sources.push(format!("{root}/study/response"));
+    }
+    let field = |name: &str| {
+        sources.iter().find_map(|source| {
+            let field_path = format!("{source}/{name}");
+            question
+                .pointer(&field_path)
+                .map(|value| (field_path, value))
+        })
+    };
+    let Some((correct_path, correct_ids)) = field("correctOptionIds") else {
+        return;
+    };
+    let Some(correct_ids) = correct_ids.as_array() else {
+        return;
+    };
+    let response_set = field("responseSet");
+    for (index, id) in correct_ids.iter().enumerate() {
+        let Some(id) = id.as_str() else {
+            continue;
+        };
+        let exists = response_set
+            .as_ref()
+            .and_then(|(_, set)| set.get("options"))
+            .and_then(Value::as_array)
+            .is_some_and(|options| {
+                options
+                    .iter()
+                    .any(|option| option.get("id").and_then(Value::as_str) == Some(id))
+            });
+        if !exists {
+            let mut diagnostic = error(
+                "QDEF_CONFIG_INVALID",
+                format!("{path}{correct_path}/{index}"),
+                format!(
+                    "The identifier '{id}' does not name an option in the effective ResponseSet."
+                ),
+                Some("Select an option from the ResponseSet used by this question."),
+            );
+            if let Some((set_path, _)) = &response_set {
+                diagnostic
+                    .related_paths
+                    .push(format!("{path}{set_path}/options"));
+            }
+            diagnostics.push(diagnostic);
+        }
+    }
+}
+
+/// Resolve declared JSON-pointer paths. A wildcard visits array members only;
+/// arbitrary Config objects are never recursively interpreted as rule owners.
+fn matching_values<'a>(root: &'a Value, pattern: &str) -> Vec<(String, &'a Value)> {
+    let mut matches = vec![(String::new(), root)];
+    for segment in pattern.trim_start_matches('/').split('/') {
+        matches = matches
+            .into_iter()
+            .flat_map(|(path, value)| {
+                if segment == "*" {
+                    value
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .enumerate()
+                        .map(|(index, value)| (format!("{path}/{index}"), value))
+                        .collect::<Vec<_>>()
+                } else {
+                    value
+                        .pointer(&format!("/{segment}"))
+                        .map(|value| (format!("{path}/{segment}"), value))
+                        .into_iter()
+                        .collect()
+                }
+            })
+            .collect();
+    }
+    matches
 }
 
 fn first_bound<'a>(question: &Value, paths: &'a [String], date: bool) -> Option<(&'a str, f64)> {

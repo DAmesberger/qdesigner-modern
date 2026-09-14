@@ -1,4 +1,4 @@
-# Portable form module catalogue
+# Portable questionnaire module catalogue
 
 The serializable module contracts live in
 [`packages/questionnaire-core/src/module-catalogue.json`](../../packages/questionnaire-core/src/module-catalogue.json).
@@ -9,8 +9,8 @@ capabilities, defaults and options, adding only local component loaders.
 The form inventory is explicit: `text-display`, `text-instruction`, `instruction`,
 `media-display`, `bar-chart`, `statistical-feedback`, `text-input`, `number-input`,
 `single-choice`, `multiple-choice`, `scale`, `rating`, `matrix`, `ranking`,
-`date-time`, `file-upload`, `media-response` and `drawing`. The three reaction
-modules belong to the reaction catalogue milestone (#82).
+`date-time`, `file-upload`, `media-response` and `drawing`. Reaction metadata adds
+`reaction-time`, `reaction-experiment` and `webgl` under milestone #82.
 
 ## Configuration boundary
 
@@ -20,6 +20,12 @@ JSON Schema 2020-12. Declarative `orderedBounds` rules compare effective bounds
 using the runtime's field precedence; `uniqueItemKeys` rules reject ambiguous
 option, row, column and ranking identifiers. The server has no HTTP or file
 schema resolver enabled.
+
+Reaction rules also use `orderedValuePairs` for uniform timing distributions and
+`itemReferences` for correctness references into ResponseSets. Declared paths may
+contain array wildcards, so duplicate trial IDs are checked within their owning
+block, rather than accidentally treating all blocks as one collection. Diagnostics
+identify both the invalid field and the relevant source collection or prior ID.
 
 Bounds include declared runtime fallbacks where omission affects validity. Date
 constraints reject invalid calendar dates and reversed bounds, including local
@@ -42,6 +48,52 @@ navigation and analytics envelope fields, and puts module-specific properties
 under `question.config`. An explicitly nested `config` stays at that level.
 `text-display`'s object-shaped auto-advance configuration remains under `config`;
 analytics' boolean auto-advance flag is a question property.
+
+Reaction defaults deliberately contain one nested `config`. This keeps their
+scientific response settings together when QuestionFactory extracts envelope
+fields. The catalogue also recognizes native keypress response envelopes and
+Reaction Lab's generated display summary and response-export settings.
+
+## Reaction configuration
+
+The reaction-time inventory contains all 16 task types: standard, n-back, stroop,
+flanker, iat, dot-probe, go-nogo, sart, simon, posner, visual-search, sternberg,
+pvt, temporal-order, rsvp and custom. Reaction Lab currently offers seven starter
+templates (standard, flanker, n-back, stroop, dot-probe, iat and custom); its
+materialized block/trial model and WebGL's stimulus model have their own schemas.
+WebGL remains intentionally absent from the new-question palette; imported
+definitions retain its configuration editor and participant runtime. Reaction Lab
+opens its dedicated workspace when newly added.
+
+The shared schemas describe stimulus variants, task parameters, fixed/uniform
+TimingSpecs, concrete trials and phases, frame budgets, response options and
+bindings, correctness, feedback, practice criteria and counterbalancing. Keyboard,
+pointer, touch, gamepad and HID bindings retain their source-specific fields.
+Questionnaire `randomizationSeed` and `validityPolicy` are portable settings;
+omitting the policy retains the runtime's `record` default without inventing a
+serialized value. Explicit `enforce` remains explicit.
+
+The existing seeded compiler materializes trials before execution. Import and
+export neither sample distributions nor create a second execution path. Explicit
+top-level blocks are authored data. A procedural reaction-time `study` snapshot
+remains a historical compiled artifact ignored by the runtime; a custom study's
+blocks remain authored data. Opening an editor does not replace the stored
+configuration. Subsequent edits retain explicit blocks, counterbalancing and
+recognized response settings. Normalization preserves authored frame budgets and
+practice criteria into the actual compiled plan.
+
+Server fixtures are generated from the actual authoring constructors and pinned
+in `apps/server/tests/fixtures/qdef-reaction-*.json`. The browser fixture test checks
+the complete task/template inventories, catalogue defaults, seeded plans and
+concrete scientific fields, including frame counts and response identities.
+Use `UPDATE_REACTION_FIXTURES=1` only when intentionally updating these reviewed
+fixtures. Positive round trips and path-addressed negative cases cross the same
+authenticated Definition HTTP boundary as ordinary product imports.
+
+Browser reaction tests use synthetic inputs and inspect persisted answers, trial
+rows and timing provenance. They verify software behavior, not physical display
+or response-device timing accuracy. Physical device qualification, asset packaging
+and the remaining behavioral-model capabilities keep their separate criteria.
 
 The persisted configuration stays unchanged when adapting it for participant
 rendering. For example, a scale may store `display.style` and endpoint labels as

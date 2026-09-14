@@ -9,42 +9,32 @@
 
   interface Props {
     question: Question & { config: WebGLConfig };
+    onUpdate?: (updates: { config: WebGLConfig }) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
-  let hydratedQuestionId = $state<string | null>(null);
-
-  function hydrateQuestionConfig(force = false) {
-    if (!question || typeof question !== 'object') return;
-
-    const nextConfig = normalizeWebGLQuestionConfig(question);
-    const currentSerialized = JSON.stringify(question.config ?? null);
-    const nextSerialized = JSON.stringify(nextConfig);
-
-    if (force || currentSerialized !== nextSerialized) {
-      question.config = nextConfig;
-    }
-
-    const nextResponse = {
-      ...(question.response || {}),
-      ...nextConfig.response,
-    };
-    const currentResponseSerialized = JSON.stringify(question.response ?? null);
-    const nextResponseSerialized = JSON.stringify(nextResponse);
-    if (force || currentResponseSerialized !== nextResponseSerialized) {
-      question.response = nextResponse as typeof question.response;
-    }
-
-    hydratedQuestionId = question.id ?? null;
+  let { question: incomingQuestion, onUpdate }: Props = $props();
+  // The properties panel keys this editor by question identity. Bind controls to
+  // an owned draft; opening the panel must not rewrite the stored definition.
+  // svelte-ignore state_referenced_locally -- one owned draft per keyed question
+  let question = $state(createWorkingQuestion(incomingQuestion));
+  function createWorkingQuestion(source: Props['question']) {
+    return { ...$state.snapshot(source), config: normalizeWebGLQuestionConfig(source) };
   }
-
-  hydrateQuestionConfig(true);
-
+  let savedConfig: string | undefined;
+  let observedSource: string | undefined;
   $effect(() => {
-    const nextQuestionId = question?.id ?? null;
-    if (nextQuestionId !== hydratedQuestionId) {
-      hydrateQuestionConfig(true);
-    }
+    const source = JSON.stringify(incomingQuestion);
+    if (source === observedSource) return;
+    observedSource = source;
+    const next = createWorkingQuestion(incomingQuestion);
+    savedConfig = JSON.stringify(next.config);
+    question = next;
+  });
+  $effect(() => {
+    const serialized = JSON.stringify(question.config);
+    if (serialized === savedConfig) return;
+    savedConfig = serialized;
+    onUpdate?.({ config: JSON.parse(serialized) as WebGLConfig });
   });
 
   // Shape presets
