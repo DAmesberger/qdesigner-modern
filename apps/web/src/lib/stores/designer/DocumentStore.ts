@@ -180,6 +180,13 @@ export class DocumentStore {
       normalized.consent = deepClone(source.consent);
     }
 
+    if (source?.extensions) {
+      normalized.extensions = deepClone(source.extensions);
+    }
+    if (source?.metadata) {
+      normalized.metadata = deepClone(source.metadata);
+    }
+
     normalized.variables = Array.isArray(source?.variables) ? deepClone(source.variables) : [];
     normalized.questions = Array.isArray(source?.questions) ? deepClone(source.questions) : [];
     normalized.flow = Array.isArray(source?.flow) ? deepClone(source.flow) : [];
@@ -651,7 +658,7 @@ export class DocumentStore {
 
       let blocks = Array.isArray(sourcePage.blocks) ? deepClone(sourcePage.blocks) : [];
 
-      if (blocks.length === 0) {
+      if (!Array.isArray(sourcePage.blocks) && !Array.isArray(sourcePage.questions)) {
         const pageQuestions = Array.isArray(sourcePage.questions)
           ? sourcePage.questions.filter((id: string) => questionIdSet.has(id))
           : [];
@@ -680,6 +687,7 @@ export class DocumentStore {
         conditions: rawBlock.conditions,
         condition: rawBlock.condition,
         adaptive: rawBlock.adaptive,
+        layout: rawBlock.layout,
       }));
 
       return {
@@ -689,6 +697,7 @@ export class DocumentStore {
         blocks: normalizedBlocks,
         layout: sourcePage.layout,
         conditions: sourcePage.conditions,
+        settings: sourcePage.settings,
       };
     });
   }
@@ -713,7 +722,7 @@ export class DocumentStore {
 
     questionnaire.pages.forEach((page) => {
       if (!page.id) page.id = generateId('page');
-      if (!Array.isArray(page.blocks) || page.blocks.length === 0) {
+      if (!Array.isArray(page.blocks)) {
         page.blocks = [
           {
             id: generateId('block'),
@@ -752,190 +761,7 @@ export class DocumentStore {
       ...question,
       order: index,
       required: question.required ?? false,
-      responseType: this.ensureResponseType(question as Question),
     }));
-  }
-
-  private ensureResponseType(question: Question): DynamicValue {
-    const existing = (question as DynamicValue).responseType;
-    if (existing?.type) {
-      return existing;
-    }
-
-    const normalizeOptions = (
-      input: DynamicValue
-    ): Array<{ value: string | number | boolean; label: string; key?: string }> => {
-      if (!Array.isArray(input)) return [];
-      const normalized = input
-        .map(
-          (
-            option: DynamicValue
-          ): { value: string | number | boolean; label: string; key?: string } | null => {
-            if (option === null || option === undefined) return null;
-            const rawValue = option.value ?? option.id ?? option.label;
-            if (rawValue === undefined || rawValue === null) return null;
-            const parsed: { value: string | number | boolean; label: string; key?: string } = {
-              ...option,
-              value: rawValue,
-              label: String(option.label ?? rawValue),
-            };
-            if (option.key !== undefined && option.key !== null) {
-              parsed.key = String(option.key);
-            }
-            return parsed;
-          }
-        )
-        .filter(
-          (option): option is { value: string | number | boolean; label: string; key?: string } =>
-            option !== null
-        );
-      return normalized;
-    };
-
-    const legacyResponse = (question as DynamicValue).response;
-    const displayOptions = (question as DynamicValue).display?.options;
-
-    if (legacyResponse?.type) {
-      const type = String(legacyResponse.type);
-      if (type === 'single' || type === 'radio') {
-        return {
-          type: 'single',
-          options: normalizeOptions(legacyResponse.options || displayOptions),
-        };
-      }
-
-      if (type === 'multiple' || type === 'checkbox') {
-        return {
-          type: 'multiple',
-          options: normalizeOptions(legacyResponse.options || displayOptions),
-        };
-      }
-
-      if (type === 'text') {
-        return {
-          type: 'text',
-          minLength: legacyResponse.minLength,
-          maxLength: legacyResponse.maxLength,
-        };
-      }
-
-      if (type === 'number') {
-        return {
-          type: 'number',
-          min: legacyResponse.min,
-          max: legacyResponse.max,
-        };
-      }
-
-      if (type === 'scale') {
-        return {
-          type: 'scale',
-          min: legacyResponse.min ?? 1,
-          max: legacyResponse.max ?? 5,
-          minLabel: legacyResponse.minLabel,
-          maxLabel: legacyResponse.maxLabel,
-        };
-      }
-
-      if (type === 'keypress') {
-        return {
-          type: 'keypress',
-          keys: Array.isArray(legacyResponse.keys) ? legacyResponse.keys : [],
-        };
-      }
-
-      if (type === 'none') {
-        return {
-          type: 'none',
-          delay: legacyResponse.delay ?? 0,
-        };
-      }
-    }
-
-    if (question.type === QuestionTypes.TEXT_INPUT) {
-      return { type: 'text' };
-    }
-
-    if (question.type === QuestionTypes.NUMBER_INPUT) {
-      return { type: 'number' };
-    }
-
-    if (question.type === QuestionTypes.SINGLE_CHOICE) {
-      return {
-        type: 'single',
-        options: normalizeOptions(displayOptions),
-      };
-    }
-
-    if (question.type === QuestionTypes.MULTIPLE_CHOICE) {
-      return {
-        type: 'multiple',
-        options: normalizeOptions(displayOptions),
-      };
-    }
-
-    if (question.type === QuestionTypes.SCALE || question.type === QuestionTypes.RATING) {
-      return {
-        type: 'scale',
-        min: 1,
-        max: 5,
-      };
-    }
-
-    // MOD-02: the previously-unanswerable advanced question types. These render
-    // through their mounted runtime component (ADR 0018); the responseType is used
-    // for variable typing and to keep them out of the 'none' auto-advance branch.
-    if (question.type === QuestionTypes.MATRIX) {
-      const matrixDisplay = (question as DynamicValue).display ?? {};
-      return {
-        type: 'matrix',
-        rows: matrixDisplay.rows ?? [],
-        columns: matrixDisplay.columns ?? [],
-        responseType: matrixDisplay.responseType ?? 'single',
-      };
-    }
-
-    if (question.type === QuestionTypes.RANKING) {
-      return {
-        type: 'ranking',
-        items:
-          (question as DynamicValue).display?.items ??
-          (question as DynamicValue).display?.options ??
-          [],
-      };
-    }
-
-    if (question.type === QuestionTypes.DATE_TIME) {
-      return { type: 'datetime' };
-    }
-
-    if (question.type === QuestionTypes.FILE_UPLOAD) {
-      return { type: 'file' };
-    }
-
-    if (question.type === QuestionTypes.MEDIA_RESPONSE) {
-      return { type: 'file' };
-    }
-
-    if (question.type === QuestionTypes.DRAWING) {
-      return { type: 'drawing' };
-    }
-
-    if (question.type === QuestionTypes.REACTION_TIME) {
-      return {
-        type: 'keypress',
-        keys: ['space'],
-      };
-    }
-
-    if (question.type === QuestionTypes.REACTION_EXPERIMENT) {
-      return {
-        type: 'keypress',
-        keys: ['space'],
-      };
-    }
-
-    return { type: 'none', delay: 0 };
   }
 
   private createQuestion(type: string, order: number): Question {

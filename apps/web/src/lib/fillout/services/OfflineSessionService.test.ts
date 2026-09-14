@@ -8,155 +8,176 @@ import { OfflineSessionService } from './OfflineSessionService';
 const ID_RE = /^test-uuid-[a-z0-9]+$/;
 
 beforeEach(async () => {
-	await db.filloutSessions.clear();
+  await db.filloutSessions.clear();
 });
 
 describe('OfflineSessionService.createSession', () => {
-	it('generates a UUID id and marks synced=0', async () => {
-		const session = await OfflineSessionService.createSession('q-1', 1, 0, 0);
-		expect(session.id).toMatch(ID_RE);
-		expect(session.questionnaireId).toBe('q-1');
-		expect(session.status).toBe('active');
-		expect(session.synced).toBe(0);
-		expect(session.versionMajor).toBe(1);
-	});
+  it('generates a UUID id and marks synced=0', async () => {
+    const session = await OfflineSessionService.createSession('q-1', 1, 0, 0);
+    expect(session.id).toMatch(ID_RE);
+    expect(session.questionnaireId).toBe('q-1');
+    expect(session.status).toBe('active');
+    expect(session.synced).toBe(0);
+    expect(session.versionMajor).toBe(1);
+  });
 
-	it('persists the session to IndexedDB', async () => {
-		const session = await OfflineSessionService.createSession('q-2', 2, 1, 0, 'p-99');
-		const stored = await db.filloutSessions.get(session.id);
-		expect(stored).toBeDefined();
-		expect(stored?.participantId).toBe('p-99');
-	});
+  it('persists the session to IndexedDB', async () => {
+    const session = await OfflineSessionService.createSession('q-2', 2, 1, 0, 'p-99');
+    const stored = await db.filloutSessions.get(session.id);
+    expect(stored).toBeDefined();
+    expect(stored?.participantId).toBe('p-99');
+  });
 
-	it('two sessions for the same questionnaire have distinct ids', async () => {
-		const a = await OfflineSessionService.createSession('q-3', 1, 0, 0);
-		const b = await OfflineSessionService.createSession('q-3', 1, 0, 0);
-		expect(a.id).not.toBe(b.id);
-	});
+  it('two sessions for the same questionnaire have distinct ids', async () => {
+    const a = await OfflineSessionService.createSession('q-3', 1, 0, 0);
+    const b = await OfflineSessionService.createSession('q-3', 1, 0, 0);
+    expect(a.id).not.toBe(b.id);
+  });
 });
 
 describe('OfflineSessionService.resumeSession', () => {
-	it('returns null for a non-existent id', async () => {
-		const result = await OfflineSessionService.resumeSession('does-not-exist');
-		expect(result).toBeNull();
-	});
+  it('returns null for a non-existent id', async () => {
+    const result = await OfflineSessionService.resumeSession('does-not-exist');
+    expect(result).toBeNull();
+  });
 
-	it('returns null for a completed session', async () => {
-		const session = await OfflineSessionService.createSession('q-r', 1, 0, 0);
-		await OfflineSessionService.completeSession(session.id);
-		const result = await OfflineSessionService.resumeSession(session.id);
-		expect(result).toBeNull();
-	});
+  it('returns null for a completed session', async () => {
+    const session = await OfflineSessionService.createSession('q-r', 1, 0, 0);
+    await OfflineSessionService.completeSession(session.id);
+    const result = await OfflineSessionService.resumeSession(session.id);
+    expect(result).toBeNull();
+  });
 
-	it('returns the session for an active id', async () => {
-		const session = await OfflineSessionService.createSession('q-r2', 1, 0, 0);
-		const result = await OfflineSessionService.resumeSession(session.id);
-		expect(result?.id).toBe(session.id);
-	});
+  it('returns the session for an active id', async () => {
+    const session = await OfflineSessionService.createSession('q-r2', 1, 0, 0);
+    const result = await OfflineSessionService.resumeSession(session.id);
+    expect(result?.id).toBe(session.id);
+  });
 });
 
 describe('OfflineSessionService.findActiveSession', () => {
-	it('returns null when no active session exists for the questionnaire', async () => {
-		const result = await OfflineSessionService.findActiveSession('q-none');
-		expect(result).toBeNull();
-	});
+  it('returns null when no active session exists for the questionnaire', async () => {
+    const result = await OfflineSessionService.findActiveSession('q-none');
+    expect(result).toBeNull();
+  });
 
-	it('finds the active session by [questionnaireId+status]', async () => {
-		const session = await OfflineSessionService.createSession('q-a', 1, 0, 0);
-		const result = await OfflineSessionService.findActiveSession('q-a');
-		expect(result?.id).toBe(session.id);
-	});
+  it('finds the active session by [questionnaireId+status]', async () => {
+    const session = await OfflineSessionService.createSession('q-a', 1, 0, 0);
+    const result = await OfflineSessionService.findActiveSession('q-a');
+    expect(result?.id).toBe(session.id);
+  });
 
-	it('does not return a completed session', async () => {
-		const session = await OfflineSessionService.createSession('q-b', 1, 0, 0);
-		await OfflineSessionService.completeSession(session.id);
-		const result = await OfflineSessionService.findActiveSession('q-b');
-		expect(result).toBeNull();
-	});
+  it('does not return a completed session', async () => {
+    const session = await OfflineSessionService.createSession('q-b', 1, 0, 0);
+    await OfflineSessionService.completeSession(session.id);
+    const result = await OfflineSessionService.findActiveSession('q-b');
+    expect(result).toBeNull();
+  });
 });
 
 describe('OfflineSessionService.completeSession', () => {
-	it('sets status=completed and completedAt', async () => {
-		const session = await OfflineSessionService.createSession('q-c', 1, 0, 0);
-		await OfflineSessionService.completeSession(session.id);
-		const stored = await db.filloutSessions.get(session.id);
-		expect(stored?.status).toBe('completed');
-		expect(stored?.completedAt).toBeGreaterThan(0);
-		expect(stored?.synced).toBe(0);
-	});
+  it('sets status=completed and completedAt', async () => {
+    const session = await OfflineSessionService.createSession('q-c', 1, 0, 0);
+    await OfflineSessionService.completeSession(session.id);
+    const stored = await db.filloutSessions.get(session.id);
+    expect(stored?.status).toBe('completed');
+    expect(stored?.completedAt).toBeGreaterThan(0);
+    expect(stored?.synced).toBe(0);
+  });
 });
 
 describe('OfflineSessionService.mergeMetadata', () => {
-	it('merges a patch into existing metadata, preserving prior keys, and resets synced→0', async () => {
-		const session = await OfflineSessionService.createSession(
-			'q-m1',
-			1,
-			0,
-			0,
-			undefined,
-			{ prior: 'kept' },
-		);
-		await OfflineSessionService.markSynced(session.id);
+  it('merges a patch into existing metadata, preserving prior keys, and resets synced→0', async () => {
+    const session = await OfflineSessionService.createSession('q-m1', 1, 0, 0, undefined, {
+      prior: 'kept',
+    });
+    await OfflineSessionService.markSynced(session.id, session.syncRevision ?? 0);
 
-		await OfflineSessionService.mergeMetadata(session.id, {
-			qualityReport: { flatlines: 0 },
-		});
+    await OfflineSessionService.mergeMetadata(session.id, {
+      qualityReport: { flatlines: 0 },
+    });
 
-		const stored = await db.filloutSessions.get(session.id);
-		expect(stored?.synced).toBe(0);
-		const meta = stored?.metadata as { prior?: string; qualityReport?: { flatlines: number } };
-		expect(meta.prior).toBe('kept');
-		expect(meta.qualityReport).toEqual({ flatlines: 0 });
-	});
+    const stored = await db.filloutSessions.get(session.id);
+    expect(stored?.synced).toBe(0);
+    const meta = stored?.metadata as { prior?: string; qualityReport?: { flatlines: number } };
+    expect(meta.prior).toBe('kept');
+    expect(meta.qualityReport).toEqual({ flatlines: 0 });
+  });
 
-	it('drops undefined patch values so existing keys are not clobbered', async () => {
-		const session = await OfflineSessionService.createSession(
-			'q-m2',
-			1,
-			0,
-			0,
-			undefined,
-			{ custom: { keep: true } },
-		);
+  it('drops undefined patch values so existing keys are not clobbered', async () => {
+    const session = await OfflineSessionService.createSession('q-m2', 1, 0, 0, undefined, {
+      custom: { keep: true },
+    });
 
-		await OfflineSessionService.mergeMetadata(session.id, {
-			qualityReport: { flatlines: 1 },
-			custom: undefined,
-		});
+    await OfflineSessionService.mergeMetadata(session.id, {
+      qualityReport: { flatlines: 1 },
+      custom: undefined,
+    });
 
-		const stored = await db.filloutSessions.get(session.id);
-		const meta = stored?.metadata as { custom?: { keep: boolean }; qualityReport?: unknown };
-		expect(meta.custom).toEqual({ keep: true });
-		expect(meta.qualityReport).toEqual({ flatlines: 1 });
-	});
+    const stored = await db.filloutSessions.get(session.id);
+    const meta = stored?.metadata as { custom?: { keep: boolean }; qualityReport?: unknown };
+    expect(meta.custom).toEqual({ keep: true });
+    expect(meta.qualityReport).toEqual({ flatlines: 1 });
+  });
 
-	it('is a no-op when the session row is absent', async () => {
-		await OfflineSessionService.mergeMetadata('does-not-exist', { qualityReport: {} });
-		expect(await db.filloutSessions.get('does-not-exist')).toBeUndefined();
-	});
+  it('is a no-op when the session row is absent', async () => {
+    await OfflineSessionService.mergeMetadata('does-not-exist', { qualityReport: {} });
+    expect(await db.filloutSessions.get('does-not-exist')).toBeUndefined();
+  });
 });
 
 describe('OfflineSessionService sync tracking', () => {
-	it('getUnsyncedSessions returns sessions with synced=0', async () => {
-		await OfflineSessionService.createSession('q-u1', 1, 0, 0);
-		await OfflineSessionService.createSession('q-u2', 1, 0, 0);
-		const unsynced = await OfflineSessionService.getUnsyncedSessions();
-		expect(unsynced.length).toBe(2);
-	});
+  it('getUnsyncedSessions returns sessions with synced=0', async () => {
+    await OfflineSessionService.createSession('q-u1', 1, 0, 0);
+    await OfflineSessionService.createSession('q-u2', 1, 0, 0);
+    const unsynced = await OfflineSessionService.getUnsyncedSessions();
+    expect(unsynced.length).toBe(2);
+  });
 
-	it('markSynced flips synced to 1, removing the session from unsynced list', async () => {
-		const session = await OfflineSessionService.createSession('q-u3', 1, 0, 0);
-		await OfflineSessionService.markSynced(session.id);
-		const unsynced = await OfflineSessionService.getUnsyncedSessions();
-		expect(unsynced.find((s) => s.id === session.id)).toBeUndefined();
-	});
+  it('markSynced flips synced to 1, removing the session from unsynced list', async () => {
+    const session = await OfflineSessionService.createSession('q-u3', 1, 0, 0);
+    await OfflineSessionService.markSynced(session.id, session.syncRevision ?? 0);
+    const unsynced = await OfflineSessionService.getUnsyncedSessions();
+    expect(unsynced.find((s) => s.id === session.id)).toBeUndefined();
+  });
 
-	it('updateProgress resets synced back to 0 (subsequent edit needs re-sync)', async () => {
-		const session = await OfflineSessionService.createSession('q-u4', 1, 0, 0);
-		await OfflineSessionService.markSynced(session.id);
-		await OfflineSessionService.updateProgress(session.id, { page: 5 });
-		const stored = await db.filloutSessions.get(session.id);
-		expect(stored?.synced).toBe(0);
-		expect((stored?.metadata as { progress?: { page: number } })?.progress?.page).toBe(5);
-	});
+  it('updateProgress resets synced back to 0 (subsequent edit needs re-sync)', async () => {
+    const session = await OfflineSessionService.createSession('q-u4', 1, 0, 0);
+    await OfflineSessionService.markSynced(session.id, session.syncRevision ?? 0);
+    await OfflineSessionService.updateProgress(session.id, { page: 5 });
+    const stored = await db.filloutSessions.get(session.id);
+    expect(stored?.synced).toBe(0);
+    expect((stored?.metadata as { progress?: { page: number } })?.progress?.page).toBe(5);
+  });
+});
+
+describe('completion metadata concurrency', () => {
+  it('keeps newer metadata queued when an older session upload is acknowledged', async () => {
+    const session = await OfflineSessionService.createSession('q', 1, 0, 0);
+    const sent = await OfflineSessionService.getSession(session.id);
+    await OfflineSessionService.mergeMetadata(session.id, { screenOut: { reason: 'under-age' } });
+    await OfflineSessionService.completeSession(session.id);
+    await OfflineSessionService.markSynced(session.id, sent?.syncRevision ?? 0);
+    const queued = await OfflineSessionService.getUnsyncedSessions();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.metadata).toMatchObject({ screenOut: { reason: 'under-age' } });
+    const final = queued[0]!;
+    await OfflineSessionService.markSynced(session.id, final.syncRevision ?? 0);
+    expect(await OfflineSessionService.getUnsyncedSessions()).toHaveLength(0);
+  });
+
+  it('merges concurrent progress and completion metadata without overwriting either', async () => {
+    const session = await OfflineSessionService.createSession('q', 1, 0, 0, undefined, {
+      consent: true,
+    });
+    await Promise.all([
+      OfflineSessionService.updateProgress(session.id, { progressPercentage: 100 }),
+      OfflineSessionService.mergeMetadata(session.id, { screenOut: { reason: 'under-age' } }),
+    ]);
+    expect((await OfflineSessionService.getSession(session.id))?.metadata).toEqual({
+      consent: true,
+      progress: { progressPercentage: 100 },
+      screenOut: { reason: 'under-age' },
+    });
+  });
 });

@@ -1,0 +1,578 @@
+{
+  "$schema": "https://schemas.qdesigner.dev/questionnaire/1.0.0",
+  "format": "qdesigner.questionnaire",
+  "formatVersion": "1.0.0",
+  "questionnaire": {
+    "name": "Portable behavioral study",
+    "description": "Full behavioral exchange",
+    "version": "2.3.4",
+    "defaultLocale": "en",
+    "consent": {
+      "title": "Study consent",
+      "content": "Please read the information.",
+      "checkboxes": [
+        {
+          "id": "agree",
+          "label": "I agree",
+          "required": true
+        }
+      ],
+      "requireSignature": true
+    }
+  },
+  "assets": {},
+  "variables": {
+    "age": {
+      "name": "age",
+      "type": "number",
+      "scope": "global",
+      "defaultValue": 21,
+      "description": "Age at enrollment",
+      "validation": [
+        {
+          "type": "min",
+          "value": 0,
+          "message": "Use a nonnegative age",
+          "condition": "true"
+        }
+      ]
+    },
+    "adultEligible": {
+      "name": "adultEligible",
+      "type": "boolean",
+      "scope": "local",
+      "defaultValue": false,
+      "formula": "age >= 18",
+      "dependencies": [
+        "age"
+      ]
+    },
+    "group": {
+      "name": "group",
+      "type": "string",
+      "scope": "global",
+      "defaultValue": "A"
+    },
+    "item": {
+      "name": "item",
+      "type": "string",
+      "scope": "temporary",
+      "defaultValue": ""
+    },
+    "cohort": {
+      "name": "cohort",
+      "type": "object",
+      "scope": "global",
+      "defaultValue": null,
+      "server": {
+        "source": "response",
+        "key": "score",
+        "dataset": {
+          "id": "adult-baseline",
+          "label": "Adults",
+          "versionScope": "sameMajor",
+          "completedAfter": "2026-01-01T00:00:00Z",
+          "completedBefore": "2027-01-01T00:00:00Z",
+          "where": [
+            {
+              "var": "age",
+              "op": "gte",
+              "value": 18
+            }
+          ]
+        },
+        "minN": 10,
+        "belowFloor": "placeholder",
+        "staleAfterMs": 86400000
+      }
+    },
+    "mean": {
+      "name": "mean",
+      "type": "number",
+      "scope": "global",
+      "defaultValue": 0,
+      "server": {
+        "source": "response",
+        "key": "score",
+        "stat": "mean",
+        "minN": 10,
+        "belowFloor": "hide"
+      }
+    },
+    "rt": {
+      "name": "rt",
+      "type": "object",
+      "scope": "global",
+      "defaultValue": null,
+      "server": {
+        "source": "trials",
+        "key": "reaction",
+        "metric": "accuracy",
+        "includeInvalidated": false
+      }
+    },
+    "scale": {
+      "name": "scale",
+      "type": "number",
+      "scope": "global",
+      "defaultValue": 0,
+      "metadata": {
+        "scoreOf": "wellbeing"
+      }
+    }
+  },
+  "questions": {
+    "score": {
+      "type": "scale",
+      "required": true,
+      "display": {
+        "prompt": "Wellbeing",
+        "min": 1,
+        "max": 5
+      },
+      "response": {
+        "saveAs": "wellbeing-answer"
+      }
+    },
+    "followup": {
+      "type": "text-input",
+      "required": false,
+      "display": {
+        "prompt": "Why?"
+      },
+      "settings": {
+        "required": false,
+        "hidden": false,
+        "readOnly": false,
+        "showNumber": true,
+        "randomize": false
+      },
+      "carryForward": {
+        "sourceQuestionId": "score",
+        "mode": "text-content",
+        "targetField": "prompt"
+      }
+    },
+    "reaction": {
+      "type": "reaction-time",
+      "required": false,
+      "config": {
+        "task": {
+          "type": "standard"
+        }
+      }
+    }
+  },
+  "structure": {
+    "pages": [
+      {
+        "id": "start",
+        "name": "Start",
+        "layout": {
+          "type": "vertical",
+          "columns": 1,
+          "spacing": 12,
+          "alignment": "left"
+        },
+        "conditions": [
+          {
+            "formula": "true",
+            "target": "show"
+          }
+        ],
+        "settings": {
+          "showTitle": true,
+          "showProgressBar": true,
+          "allowNavigation": true,
+          "autoAdvance": false,
+          "timeLimit": 60000,
+          "onTimeLimit": "auto-advance"
+        },
+        "blocks": [
+          {
+            "id": "fixed",
+            "name": "Base",
+            "type": "standard",
+            "questionIds": [
+              "score",
+              "followup"
+            ],
+            "layout": {
+              "type": "grid",
+              "columns": 2,
+              "spacing": 8,
+              "alignment": "center"
+            },
+            "conditions": [
+              {
+                "formula": "adultEligible",
+                "target": "show"
+              }
+            ],
+            "condition": "A"
+          },
+          {
+            "id": "random",
+            "type": "randomized",
+            "questionIds": [
+              "score",
+              "followup"
+            ],
+            "randomization": {
+              "type": "subset",
+              "subset": 1,
+              "fixedPositions": {
+                "score": 0
+              }
+            }
+          },
+          {
+            "id": "conditional",
+            "type": "conditional",
+            "questionIds": [
+              "followup"
+            ],
+            "conditions": [
+              {
+                "formula": "age >= 18",
+                "target": "show"
+              }
+            ]
+          },
+          {
+            "id": "loop",
+            "type": "loop",
+            "questionIds": [
+              "followup"
+            ],
+            "loop": {
+              "variable": "item",
+              "values": [
+                "first",
+                "second"
+              ],
+              "shuffle": true,
+              "loopVariableName": "item",
+              "source": {
+                "type": "static"
+              },
+              "maxIterations": 2
+            }
+          },
+          {
+            "id": "adaptive",
+            "type": "adaptive",
+            "questionIds": [
+              "score"
+            ],
+            "adaptive": {
+              "itemBankId": "calibrated",
+              "items": [
+                {
+                  "id": "score",
+                  "a": 1.2,
+                  "b": 0,
+                  "c": 0.1
+                }
+              ],
+              "maxItems": 1,
+              "seThreshold": 0.3,
+              "thetaReportVariable": "scale",
+              "exposureControl": "randomesque",
+              "exposureTopK": 1,
+              "scoring": [
+                {
+                  "questionId": "score",
+                  "threshold": 3
+                }
+              ]
+            }
+          },
+          {
+            "id": "reaction-block",
+            "type": "standard",
+            "questionIds": [
+              "reaction"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "end",
+        "name": "Finish",
+        "blocks": []
+      }
+    ]
+  },
+  "flow": [
+    {
+      "id": "skip",
+      "type": "skip",
+      "condition": "age < 18",
+      "source": "start",
+      "target": "end",
+      "priority": 10
+    },
+    {
+      "id": "done",
+      "type": "terminate",
+      "condition": "false",
+      "source": "end",
+      "priority": 0,
+      "screenOutReason": "not-eligible",
+      "screenOutMessage": "Not eligible",
+      "screenOutRedirectUrl": "https://example.org/screened"
+    }
+  ],
+  "rules": [],
+  "settings": {
+    "allowBackNavigation": true,
+    "showProgressBar": true,
+    "saveProgress": true,
+    "randomizationSeed": "behavior-seed",
+    "timeZone": "Europe/Vienna",
+    "wholeSurveyTimeLimitMs": 600000,
+    "onSurveyTimeout": "terminate",
+    "surveyTimeoutMessage": "Time is up",
+    "validityPolicy": "record",
+    "requireConsent": true,
+    "requireAuthentication": false,
+    "allowAnonymous": true,
+    "distribution": {
+      "anonymousAccess": true,
+      "urlParameters": [
+        {
+          "paramName": "age",
+          "variableName": "age",
+          "required": false
+        }
+      ],
+      "completionRedirectUrl": "https://example.org/complete",
+      "completionRedirectParams": [
+        "age"
+      ],
+      "completionMessage": "Thank you",
+      "panelIntegration": {
+        "provider": "custom",
+        "completionCode": "DONE",
+        "completionUrl": "https://example.org/panel"
+      },
+      "maxResponses": 500,
+      "allowMultipleResponses": false
+    },
+    "experimentalDesign": {
+      "conditions": [
+        {
+          "name": "A",
+          "weight": 1
+        },
+        {
+          "name": "B",
+          "weight": 1
+        }
+      ],
+      "assignmentStrategy": "balanced",
+      "counterbalancing": "latin-square",
+      "seed": 42
+    },
+    "dataQuality": {
+      "minPageTimeMs": 1000,
+      "minTotalTimeMs": 2000,
+      "flatlineThreshold": 0.8,
+      "attentionFailureThreshold": 1
+    },
+    "fraudPrevention": {
+      "preventDuplicates": true,
+      "duplicateDetectionMethod": "combined",
+      "enableHoneypot": true,
+      "enableBehaviorAnalysis": true,
+      "allowedCountries": [
+        "AT"
+      ],
+      "blockedCountries": [
+        "XX"
+      ],
+      "enableSpeederDetection": true,
+      "speederThresholdMultiplier": 0.3,
+      "enableFlatlineDetection": true,
+      "flatlineThreshold": 0.9,
+      "fraudAction": "flag",
+      "fraudRedirectUrl": "https://example.org/rejected",
+      "fraudMessage": "Check your responses"
+    },
+    "quotas": [
+      {
+        "id": "quota",
+        "name": "Groups",
+        "description": "Balanced enrollment",
+        "logic": "cross",
+        "variables": [
+          "group"
+        ],
+        "quotas": [
+          {
+            "id": "group-a",
+            "name": "Group A",
+            "description": "Enrollment cap",
+            "target": 10,
+            "condition": "group == \"A\"",
+            "overQuotaAction": "terminate",
+            "overQuotaRedirectUrl": "https://example.org/full",
+            "overQuotaMessage": "Full",
+            "enabled": true
+          }
+        ],
+        "cells": [
+          {
+            "id": "cell-a",
+            "values": {
+              "group": "A"
+            },
+            "target": 10
+          }
+        ]
+      }
+    ],
+    "screeners": [
+      {
+        "id": "screener",
+        "name": "Eligibility",
+        "pageId": "start",
+        "rules": [
+          {
+            "id": "adult",
+            "label": "Adults",
+            "eligibleWhen": "adultEligible",
+            "screenOutReason": "under-age",
+            "screenOutMessage": "Adults only",
+            "screenOutRedirectUrl": "https://example.org/ineligible"
+          }
+        ]
+      }
+    ],
+    "scoring": {
+      "scales": [
+        {
+          "id": "wellbeing",
+          "name": "Wellbeing",
+          "itemIds": [
+            "score"
+          ],
+          "reverseScoredItemIds": [
+            "score"
+          ],
+          "itemMin": 1,
+          "itemMax": 5,
+          "aggregation": "mean",
+          "missingPolicy": "available",
+          "norm": {
+            "mean": 3,
+            "sd": 1,
+            "source": "Authored reference"
+          }
+        }
+      ]
+    },
+    "report": {
+      "enabled": true,
+      "title": "Your results",
+      "layout": {
+        "columns": 12,
+        "rowHeight": 100,
+        "gap": 12
+      },
+      "widgets": [
+        {
+          "id": "result",
+          "type": "score-tile",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "w": 6,
+            "h": 2
+          },
+          "binding": {
+            "source": "score",
+            "key": "wellbeing",
+            "field": "value"
+          },
+          "comparison": {
+            "source": "server-variable",
+            "serverVariable": "cohort",
+            "fallback": "message"
+          },
+          "interpretation": "Higher values mean better wellbeing",
+          "text": "Your wellbeing"
+        },
+        {
+          "id": "reaction-result",
+          "type": "reaction-cohort-box",
+          "position": {
+            "x": 6,
+            "y": 0,
+            "w": 6,
+            "h": 2
+          },
+          "binding": {
+            "source": "variable",
+            "key": "reaction"
+          },
+          "reaction": {
+            "stat": "mean",
+            "metric": "accuracy",
+            "includeInvalidated": false
+          },
+          "comparison": {
+            "source": "server-variable",
+            "serverVariable": "rt",
+            "fallback": "hide"
+          }
+        }
+      ],
+      "enablePdfDownload": true,
+      "refreshMs": 86400000
+    },
+    "metadata": {
+      "instrument": "portable-behavior"
+    }
+  },
+  "translations": {
+    "de": {
+      "label": "Deutsch",
+      "questions": {
+        "score": {
+          "prompt": "Wohlbefinden",
+          "options": {
+            "1": "Niedrig",
+            "5": "Hoch"
+          }
+        },
+        "followup": {
+          "prompt": "Warum?"
+        }
+      },
+      "pages": {
+        "start": {
+          "title": "Anfang"
+        }
+      },
+      "chrome": {
+        "welcome": "Willkommen",
+        "consent": "Bitte lesen",
+        "completion": "Danke"
+      }
+    }
+  },
+  "extensions": {
+    "org.example.study": {
+      "required": false,
+      "data": {
+        "protocol": "ABC-1",
+        "labels": [
+          "baseline",
+          "followup"
+        ]
+      }
+    }
+  }
+}

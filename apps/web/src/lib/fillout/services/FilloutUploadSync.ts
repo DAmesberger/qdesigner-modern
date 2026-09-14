@@ -745,7 +745,7 @@ export class FilloutUploadSync {
 		// destructive purge so unacked rows — and the response rows a pending binary
 		// still needs patched — survive.
 		if (rejected === 0 && binariesPending === 0) {
-			await OfflineSessionService.markSynced(session.id);
+			const acknowledged = await OfflineSessionService.markSynced(session.id, session.syncRevision ?? 0);
 
 			// Purge the now-synced participant data from IndexedDB (F005): once the
 			// server holds it, sensitive response/event/variable data must not linger
@@ -753,7 +753,7 @@ export class FilloutUploadSync {
 			// session keeps its synced responses locally so resume/carry-forward can
 			// rehydrate prior answers. purgeSyncedSessionData deletes only synced===1
 			// rows, so anything that arrived after this drain (still unsynced) is safe.
-			if (completed) {
+			if (completed && acknowledged) {
 				await db.purgeSyncedSessionData(session.id);
 			}
 		}
@@ -876,7 +876,7 @@ export class FilloutUploadSync {
 			variables.length === 0 &&
 			trials.length === 0
 		) {
-			await OfflineSessionService.markSynced(session.id);
+			await OfflineSessionService.markSynced(session.id, session.syncRevision ?? 0);
 		}
 	}
 

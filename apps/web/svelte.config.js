@@ -24,6 +24,8 @@ const config = {
     alias: {
       '@qdesigner/contracts/generated': '../../packages/contracts/src/generated',
       '@qdesigner/contracts': '../../packages/contracts/src/index.ts',
+      '@qdesigner/questionnaire-core/fixtures/formula-dependency-cases.json':
+        '../../packages/questionnaire-core/fixtures/formula-dependency-cases.json',
       '@qdesigner/questionnaire-core/questionnaire':
         '../../packages/questionnaire-core/src/questionnaire.ts',
       '@qdesigner/questionnaire-core/response':

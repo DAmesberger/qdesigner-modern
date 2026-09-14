@@ -1,0 +1,1747 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "variables": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Variable"
+      }
+    },
+    "structure": {
+      "type": "object",
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Page"
+          }
+        }
+      },
+      "required": [
+        "pages"
+      ],
+      "additionalProperties": false
+    },
+    "flow": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FlowControl"
+      }
+    },
+    "settings": {
+      "$ref": "#/$defs/QuestionnaireSettings"
+    },
+    "translations": {
+      "$ref": "#/$defs/QuestionnaireTranslations"
+    },
+    "questionnaire": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "defaultLocale": {
+          "type": "string"
+        },
+        "consent": {
+          "$ref": "#/$defs/ConsentContent"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-zA-Z0-9_-]+(?:[.:][a-zA-Z0-9_-]+)+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "required": {
+            "const": false
+          },
+          "data": {}
+        },
+        "required": [
+          "required",
+          "data"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "VariableType": {
+      "enum": [
+        "number",
+        "string",
+        "boolean",
+        "date",
+        "time",
+        "array",
+        "object",
+        "reaction_time",
+        "stimulus_onset"
+      ]
+    },
+    "DynamicValue": {},
+    "ValidationRule": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "required",
+            "min",
+            "max",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "custom"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicValue"
+        },
+        "message": {
+          "type": "string"
+        },
+        "condition": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "ServerStat": {
+      "enum": [
+        "n",
+        "mean",
+        "sd",
+        "min",
+        "max",
+        "p10",
+        "p25",
+        "median",
+        "p75",
+        "p90",
+        "p95",
+        "p99"
+      ]
+    },
+    "DatasetFilter": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "versionScope": {
+          "enum": [
+            "any",
+            "sameMajor",
+            "exact"
+          ]
+        },
+        "completedAfter": {
+          "type": "string"
+        },
+        "completedBefore": {
+          "type": "string"
+        },
+        "where": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "var": {
+                "type": "string"
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "ne",
+                  "lt",
+                  "lte",
+                  "gt",
+                  "gte",
+                  "in"
+                ]
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "required": [
+              "var",
+              "op",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "ServerComputationDef": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "enum": [
+            "variable",
+            "response",
+            "trials"
+          ]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metric": {
+          "enum": [
+            "rt",
+            "accuracy"
+          ]
+        },
+        "includeInvalidated": {
+          "type": "boolean"
+        },
+        "stat": {
+          "$ref": "#/$defs/ServerStat"
+        },
+        "dataset": {
+          "$ref": "#/$defs/DatasetFilter"
+        },
+        "minN": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "belowFloor": {
+          "enum": [
+            "hide",
+            "placeholder"
+          ]
+        },
+        "staleAfterMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "source",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "Variable": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "type": {
+          "$ref": "#/$defs/VariableType"
+        },
+        "scope": {
+          "enum": [
+            "global",
+            "local",
+            "temporary"
+          ]
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/DynamicValue"
+        },
+        "formula": {
+          "type": "string"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "validation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationRule"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "server": {
+          "$ref": "#/$defs/ServerComputationDef"
+        }
+      },
+      "required": [
+        "type",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "LayoutConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "vertical",
+            "horizontal",
+            "grid"
+          ]
+        },
+        "columns": {
+          "type": "number"
+        },
+        "spacing": {
+          "type": "number"
+        },
+        "alignment": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "RandomizationConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "all",
+            "subset",
+            "latin-square"
+          ]
+        },
+        "subset": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fixedPositions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "LoopSource": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "static",
+            "answer",
+            "variable"
+          ]
+        },
+        "questionId": {
+          "type": "string"
+        },
+        "variableId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "LoopConfig": {
+      "type": "object",
+      "properties": {
+        "variable": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicValue"
+          }
+        },
+        "shuffle": {
+          "type": "boolean"
+        },
+        "loopVariableName": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/LoopSource"
+        },
+        "maxIterations": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "variable",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "DisplayCondition": {
+      "type": "object",
+      "properties": {
+        "formula": {
+          "type": "string"
+        },
+        "target": {
+          "enum": [
+            "show",
+            "hide",
+            "enable",
+            "disable"
+          ]
+        }
+      },
+      "required": [
+        "formula"
+      ],
+      "additionalProperties": false
+    },
+    "CATItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        },
+        "c": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "a",
+        "b"
+      ],
+      "additionalProperties": false
+    },
+    "AdaptiveExposureControl": {
+      "enum": [
+        "none",
+        "randomesque"
+      ]
+    },
+    "AdaptiveItemScoring": {
+      "type": "object",
+      "properties": {
+        "questionId": {
+          "type": "string"
+        },
+        "correctValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "threshold": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "questionId"
+      ],
+      "additionalProperties": false
+    },
+    "AdaptiveBlockConfig": {
+      "type": "object",
+      "properties": {
+        "itemBankId": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CATItem"
+          }
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seThreshold": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "thetaReportVariable": {
+          "type": "string"
+        },
+        "exposureControl": {
+          "$ref": "#/$defs/AdaptiveExposureControl"
+        },
+        "exposureTopK": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scoring": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdaptiveItemScoring"
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "Block": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "standard",
+            "randomized",
+            "conditional",
+            "loop",
+            "adaptive"
+          ]
+        },
+        "layout": {
+          "$ref": "#/$defs/LayoutConfig"
+        },
+        "randomization": {
+          "$ref": "#/$defs/RandomizationConfig"
+        },
+        "loop": {
+          "$ref": "#/$defs/LoopConfig"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DisplayCondition"
+          }
+        },
+        "condition": {
+          "type": "string"
+        },
+        "adaptive": {
+          "$ref": "#/$defs/AdaptiveBlockConfig"
+        },
+        "questionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "questionIds"
+      ],
+      "additionalProperties": false
+    },
+    "PageTimeoutAction": {
+      "enum": [
+        "auto-advance",
+        "terminate"
+      ]
+    },
+    "PageSettings": {
+      "type": "object",
+      "properties": {
+        "showTitle": {
+          "type": "boolean"
+        },
+        "showProgressBar": {
+          "type": "boolean"
+        },
+        "allowNavigation": {
+          "type": "boolean"
+        },
+        "autoAdvance": {
+          "type": "boolean"
+        },
+        "timeLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "onTimeLimit": {
+          "$ref": "#/$defs/PageTimeoutAction"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "Page": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Block"
+          }
+        },
+        "layout": {
+          "$ref": "#/$defs/LayoutConfig"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DisplayCondition"
+          }
+        },
+        "settings": {
+          "$ref": "#/$defs/PageSettings"
+        },
+        "questionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "FlowControl": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "type": {
+          "enum": [
+            "skip",
+            "branch",
+            "loop",
+            "terminate"
+          ]
+        },
+        "condition": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "number"
+        },
+        "screenOutReason": {
+          "type": "string"
+        },
+        "screenOutMessage": {
+          "type": "string"
+        },
+        "screenOutRedirectUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "condition"
+      ],
+      "additionalProperties": false
+    },
+    "SurveyTimeoutAction": {
+      "enum": [
+        "auto-submit",
+        "terminate"
+      ]
+    },
+    "WebGLSettings": {
+      "type": "object",
+      "properties": {
+        "targetFPS": {
+          "type": "number"
+        },
+        "antialias": {
+          "type": "boolean"
+        },
+        "pixelRatio": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ValidityPolicy": {
+      "enum": [
+        "record",
+        "enforce"
+      ]
+    },
+    "UrlParameterConfig": {
+      "type": "object",
+      "properties": {
+        "paramName": {
+          "type": "string"
+        },
+        "variableName": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "paramName",
+        "variableName"
+      ],
+      "additionalProperties": false
+    },
+    "PanelIntegrationConfig": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "prolific",
+            "mturk",
+            "sona",
+            "cloudresearch",
+            "custom"
+          ]
+        },
+        "completionCode": {
+          "type": "string"
+        },
+        "completionUrl": {
+          "type": "string"
+        },
+        "prolificStudyId": {
+          "type": "string"
+        },
+        "mturkHitId": {
+          "type": "string"
+        },
+        "sonaStudyId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "additionalProperties": false
+    },
+    "DistributionSettings": {
+      "type": "object",
+      "properties": {
+        "anonymousAccess": {
+          "type": "boolean"
+        },
+        "urlParameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UrlParameterConfig"
+          }
+        },
+        "completionRedirectUrl": {
+          "type": "string"
+        },
+        "completionRedirectParams": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "completionMessage": {
+          "type": "string"
+        },
+        "panelIntegration": {
+          "$ref": "#/$defs/PanelIntegrationConfig"
+        },
+        "maxResponses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowMultipleResponses": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "anonymousAccess"
+      ],
+      "additionalProperties": false
+    },
+    "ExperimentalCondition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "weight"
+      ],
+      "additionalProperties": false
+    },
+    "ExperimentalDesignConfig": {
+      "type": "object",
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExperimentalCondition"
+          }
+        },
+        "assignmentStrategy": {
+          "enum": [
+            "random",
+            "sequential",
+            "balanced"
+          ]
+        },
+        "counterbalancing": {
+          "enum": [
+            "none",
+            "latin-square",
+            "balanced-latin-square",
+            "full"
+          ]
+        },
+        "seed": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "conditions",
+        "assignmentStrategy",
+        "counterbalancing"
+      ],
+      "additionalProperties": false
+    },
+    "DataQualitySettings": {
+      "type": "object",
+      "properties": {
+        "minPageTimeMs": {
+          "type": "number"
+        },
+        "minTotalTimeMs": {
+          "type": "number"
+        },
+        "flatlineThreshold": {
+          "type": "number"
+        },
+        "attentionFailureThreshold": {
+          "type": "number"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "FraudPreventionSettings": {
+      "type": "object",
+      "properties": {
+        "preventDuplicates": {
+          "type": "boolean"
+        },
+        "duplicateDetectionMethod": {
+          "enum": [
+            "fingerprint",
+            "cookie",
+            "ip",
+            "combined"
+          ]
+        },
+        "enableHoneypot": {
+          "type": "boolean"
+        },
+        "enableBehaviorAnalysis": {
+          "type": "boolean"
+        },
+        "allowedCountries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockedCountries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enableSpeederDetection": {
+          "type": "boolean"
+        },
+        "speederThresholdMultiplier": {
+          "type": "number"
+        },
+        "enableFlatlineDetection": {
+          "type": "boolean"
+        },
+        "flatlineThreshold": {
+          "type": "number"
+        },
+        "fraudAction": {
+          "enum": [
+            "flag",
+            "terminate",
+            "redirect"
+          ]
+        },
+        "fraudRedirectUrl": {
+          "type": "string"
+        },
+        "fraudMessage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "preventDuplicates",
+        "duplicateDetectionMethod",
+        "enableHoneypot",
+        "enableBehaviorAnalysis",
+        "enableSpeederDetection",
+        "enableFlatlineDetection",
+        "fraudAction"
+      ],
+      "additionalProperties": false
+    },
+    "QuotaDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "target": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "condition": {
+          "type": "string"
+        },
+        "overQuotaAction": {
+          "enum": [
+            "terminate",
+            "redirect",
+            "skip-to-end",
+            "continue"
+          ]
+        },
+        "overQuotaRedirectUrl": {
+          "type": "string"
+        },
+        "overQuotaMessage": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "target",
+        "condition",
+        "overQuotaAction",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "QuotaCell": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "target": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "values",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "QuotaGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "quotas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuotaDefinition"
+          }
+        },
+        "logic": {
+          "enum": [
+            "independent",
+            "cross"
+          ]
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuotaCell"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "quotas",
+        "logic",
+        "variables"
+      ],
+      "additionalProperties": false
+    },
+    "ScreenerRule": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "eligibleWhen": {
+          "type": "string"
+        },
+        "screenOutReason": {
+          "type": "string"
+        },
+        "screenOutMessage": {
+          "type": "string"
+        },
+        "screenOutRedirectUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "eligibleWhen",
+        "screenOutReason"
+      ],
+      "additionalProperties": false
+    },
+    "ScreenerBlock": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pageId": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScreenerRule"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "pageId",
+        "rules"
+      ],
+      "additionalProperties": false
+    },
+    "ScaleAggregation": {
+      "enum": [
+        "sum",
+        "mean"
+      ]
+    },
+    "ScaleMissingPolicy": {
+      "enum": [
+        "listwise",
+        "mean-impute",
+        "prorate",
+        "available"
+      ]
+    },
+    "ScaleNormData": {
+      "type": "object",
+      "properties": {
+        "mean": {
+          "type": "number"
+        },
+        "sd": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string"
+        },
+        "normTableId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mean",
+        "sd"
+      ],
+      "additionalProperties": false
+    },
+    "ScaleScoringDef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "itemIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reverseScoredItemIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "itemMin": {
+          "type": "number"
+        },
+        "itemMax": {
+          "type": "number"
+        },
+        "aggregation": {
+          "$ref": "#/$defs/ScaleAggregation"
+        },
+        "missingPolicy": {
+          "$ref": "#/$defs/ScaleMissingPolicy"
+        },
+        "norm": {
+          "$ref": "#/$defs/ScaleNormData"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "itemIds",
+        "itemMin",
+        "itemMax",
+        "aggregation",
+        "missingPolicy"
+      ],
+      "additionalProperties": false
+    },
+    "ScoringConfig": {
+      "type": "object",
+      "properties": {
+        "scales": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScaleScoringDef"
+          }
+        }
+      },
+      "required": [
+        "scales"
+      ],
+      "additionalProperties": false
+    },
+    "ReportWidget": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "type": {
+          "enum": [
+            "score-tile",
+            "bar",
+            "box-cohort",
+            "reaction-cohort-box",
+            "radar-profile",
+            "distribution-with-marker",
+            "gauge",
+            "interpretive-text",
+            "results-table",
+            "completion-meta"
+          ]
+        },
+        "position": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "w": {
+              "type": "number"
+            },
+            "h": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "w",
+            "h"
+          ],
+          "additionalProperties": false
+        },
+        "binding": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "enum": [
+                "variable",
+                "score"
+              ]
+            },
+            "key": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "reaction": {
+          "type": "object",
+          "properties": {
+            "stat": {
+              "enum": [
+                "mean",
+                "median"
+              ]
+            },
+            "metric": {
+              "enum": [
+                "rt",
+                "accuracy"
+              ]
+            },
+            "includeInvalidated": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "comparison": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "enum": [
+                "none",
+                "norm-table",
+                "custom-norm",
+                "self-baseline",
+                "server-variable"
+              ]
+            },
+            "serverVariable": {
+              "type": "string"
+            },
+            "normTableId": {
+              "type": "string"
+            },
+            "fallback": {
+              "enum": [
+                "hide",
+                "norm-table",
+                "message"
+              ]
+            },
+            "fallbackNormTableId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "fallback"
+          ],
+          "additionalProperties": false
+        },
+        "interpretation": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position",
+        "binding"
+      ],
+      "additionalProperties": false
+    },
+    "ReportPageConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "const": 12
+            },
+            "rowHeight": {
+              "type": "number"
+            },
+            "gap": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "columns",
+            "rowHeight",
+            "gap"
+          ],
+          "additionalProperties": false
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReportWidget"
+          }
+        },
+        "enablePdfDownload": {
+          "type": "boolean"
+        },
+        "refreshMs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "enabled",
+        "layout",
+        "widgets"
+      ],
+      "additionalProperties": false
+    },
+    "QuestionTranslation": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "PageTranslation": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ChromeTranslation": {
+      "type": "object",
+      "properties": {
+        "welcome": {
+          "type": "string"
+        },
+        "consent": {
+          "type": "string"
+        },
+        "completion": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "LocaleTranslation": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "questions": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/QuestionTranslation"
+          }
+        },
+        "pages": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PageTranslation"
+          }
+        },
+        "chrome": {
+          "$ref": "#/$defs/ChromeTranslation"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "QuestionnaireTranslations": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/LocaleTranslation"
+      }
+    },
+    "VersionHistoryEntry": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "bumpType": {
+          "enum": [
+            "major",
+            "minor",
+            "patch"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "bumpType",
+        "note",
+        "at"
+      ],
+      "additionalProperties": false
+    },
+    "QuestionnaireSettings": {
+      "type": "object",
+      "properties": {
+        "allowBackNavigation": {
+          "type": "boolean"
+        },
+        "showProgressBar": {
+          "type": "boolean"
+        },
+        "saveProgress": {
+          "type": "boolean"
+        },
+        "randomizationSeed": {
+          "type": "string"
+        },
+        "timeZone": {
+          "type": "string"
+        },
+        "wholeSurveyTimeLimitMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "onSurveyTimeout": {
+          "$ref": "#/$defs/SurveyTimeoutAction"
+        },
+        "surveyTimeoutMessage": {
+          "type": "string"
+        },
+        "webgl": {
+          "$ref": "#/$defs/WebGLSettings"
+        },
+        "validityPolicy": {
+          "$ref": "#/$defs/ValidityPolicy"
+        },
+        "requireConsent": {
+          "type": "boolean"
+        },
+        "requireAuthentication": {
+          "type": "boolean"
+        },
+        "allowAnonymous": {
+          "type": "boolean"
+        },
+        "distribution": {
+          "$ref": "#/$defs/DistributionSettings"
+        },
+        "experimentalDesign": {
+          "$ref": "#/$defs/ExperimentalDesignConfig"
+        },
+        "dataQuality": {
+          "$ref": "#/$defs/DataQualitySettings"
+        },
+        "fraudPrevention": {
+          "$ref": "#/$defs/FraudPreventionSettings"
+        },
+        "quotas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuotaGroup"
+          }
+        },
+        "screeners": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScreenerBlock"
+          }
+        },
+        "scoring": {
+          "$ref": "#/$defs/ScoringConfig"
+        },
+        "report": {
+          "$ref": "#/$defs/ReportPageConfig"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/DynamicValue"
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ConsentCheckbox": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "ConsentContent": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "checkboxes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConsentCheckbox"
+          }
+        },
+        "requireSignature": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "QuestionSettings": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "readOnly": {
+          "type": "boolean"
+        },
+        "showNumber": {
+          "type": "boolean"
+        },
+        "randomize": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "CarryForwardMode": {
+      "enum": [
+        "default-value",
+        "selected-options",
+        "unselected-options",
+        "text-content"
+      ]
+    },
+    "CarryForwardTargetField": {
+      "enum": [
+        "value",
+        "options",
+        "prompt"
+      ]
+    },
+    "CarryForwardConfig": {
+      "type": "object",
+      "properties": {
+        "sourceQuestionId": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/CarryForwardMode"
+        },
+        "targetField": {
+          "$ref": "#/$defs/CarryForwardTargetField"
+        }
+      },
+      "required": [
+        "sourceQuestionId",
+        "mode",
+        "targetField"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

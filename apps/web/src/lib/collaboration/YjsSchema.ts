@@ -47,6 +47,9 @@ export function questionnaireToYDoc(questionnaire: Questionnaire, doc?: Y.Doc): 
     // Informed-consent chrome (F-44) round-trips as a plain meta value, mirroring
     // `settings` — the fillout entry reads it as top-level `rawDefinition.consent`.
     if (questionnaire.consent) meta.set('consent', questionnaire.consent);
+    else meta.delete('consent');
+    if (questionnaire.extensions) meta.set('extensions', questionnaire.extensions);
+    else meta.delete('extensions');
 
     // Pages (ordered)
     const pages = ydoc.getArray<Y.Map<unknown>>('pages');
@@ -124,6 +127,7 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
       saveProgress: true,
     },
     consent: (meta.get('consent') as Questionnaire['consent']) ?? undefined,
+    extensions: (meta.get('extensions') as Questionnaire['extensions']) ?? undefined,
     pages: pagesArr.toArray().map(yMapToPage),
     questions,
     variables: variablesArr.toArray().map(yMapToVariable),
@@ -150,6 +154,8 @@ function pageToYMap(page: Page): Y.Map<unknown> {
 
   if (page.layout) yPage.set('layout', page.layout);
   if (page.conditions) yPage.set('conditions', page.conditions);
+  if (page.settings) yPage.set('settings', page.settings);
+  if (page.questions) yPage.set('questions', page.questions);
 
   return yPage;
 }
@@ -171,6 +177,8 @@ function blockToYMap(block: Block): Y.Map<unknown> {
   if (block.loop) yBlock.set('loop', block.loop);
   if (block.conditions) yBlock.set('conditions', block.conditions);
   if (block.condition) yBlock.set('condition', block.condition);
+  if (block.layout) yBlock.set('layout', block.layout);
+  if (block.adaptive) yBlock.set('adaptive', block.adaptive);
 
   return yBlock;
 }
@@ -219,6 +227,8 @@ function yMapToPage(yPage: Y.Map<unknown>): Page {
     blocks,
     layout: yPage.get('layout') as Page['layout'],
     conditions: yPage.get('conditions') as Page['conditions'],
+    settings: yPage.get('settings') as Page['settings'],
+    questions: yPage.get('questions') as Page['questions'],
   };
 }
 
@@ -236,6 +246,8 @@ function yMapToBlock(yBlock: Y.Map<unknown>): Block {
     loop: yBlock.get('loop') as Block['loop'],
     conditions: yBlock.get('conditions') as Block['conditions'],
     condition: yBlock.get('condition') as string | undefined,
+    layout: yBlock.get('layout') as Block['layout'],
+    adaptive: yBlock.get('adaptive') as Block['adaptive'],
   };
 }
 

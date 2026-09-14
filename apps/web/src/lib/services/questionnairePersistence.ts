@@ -47,6 +47,7 @@ export class QuestionnairePersistenceService {
         // `rawDefinition.consent` off this same JSONB, so it must ride the content
         // blob alongside settings.requireConsent.
         consent: questionnaire.consent,
+        extensions: questionnaire.extensions,
         flow: questionnaire.flow,
         created: questionnaire.created,
         modified: new Date().toISOString(),
@@ -115,6 +116,7 @@ export class QuestionnairePersistenceService {
         variables: (content as DynamicValue).variables || [],
         settings: (content as DynamicValue).settings || data.settings || {},
         consent: (content as DynamicValue).consent || undefined,
+        extensions: (content as DynamicValue).extensions || undefined,
         flow: (content as DynamicValue).flow || [],
         created: (content as DynamicValue).created || data.createdAt,
         modified: (content as DynamicValue).modified || data.updatedAt,

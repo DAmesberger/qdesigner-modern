@@ -6,8 +6,8 @@
 //! observes an identical structure:
 //!
 //! ```text
-//!   Y.Map    "meta"       — scalar fields + `settings` (plain JSON value)
-//!   Y.Array  "pages"      — each element a Y.Map { id, name, blocks: Y.Array<Y.Map>, layout?, conditions?, script? }
+//!   Y.Map    "meta"       — scalar fields + settings, consent, extensions (plain JSON)
+//!   Y.Array  "pages"      — each element a Y.Map { id, name, blocks: Y.Array<Y.Map>, layout?, conditions?, settings?, questions? }
 //!   Y.Map    "questions"  — keyed by question id, each value a Y.Map of the question's fields
 //!   Y.Array  "variables"  — each element a Y.Map of the variable's fields
 //!   Y.Array  "flow"       — each element a Y.Map of the flow rule's fields
@@ -96,7 +96,14 @@ fn block_to_prelim(block: &Value) -> MapPrelim {
     ));
 
     // Optional fields — set only when present (mirrors the `if (block.x)` guards).
-    for key in ["randomization", "loop", "conditions", "condition"] {
+    for key in [
+        "randomization",
+        "loop",
+        "conditions",
+        "condition",
+        "layout",
+        "adaptive",
+    ] {
         if let Some(v) = block.get(key) {
             if !v.is_null() {
                 entries.push((key.to_string(), any_in(v)));
@@ -121,7 +128,9 @@ fn page_to_prelim(page: &Value) -> MapPrelim {
         .unwrap_or_default();
     entries.push(("blocks".to_string(), In::Array(ArrayPrelim::from(blocks))));
 
-    for key in ["layout", "conditions", "script"] {
+    // Retain a forbidden legacy script only so the decoder's unsafe-content
+    // guard can reject it; seeding must not silently sanitize stored content.
+    for key in ["layout", "conditions", "settings", "questions", "script"] {
         if let Some(v) = page.get(key) {
             if !v.is_null() {
                 entries.push((key.to_string(), any_in(v)));
@@ -195,9 +204,9 @@ pub fn seed_doc_from_content(doc: &Doc, content: &Value) {
         "modified",
         str_in(&str_field(content, "modified")),
     );
-    if let Some(settings) = content.get("settings") {
-        if !settings.is_null() {
-            meta.insert(&mut txn, "settings", any_in(settings));
+    for key in ["settings", "consent", "extensions"] {
+        if let Some(value) = content.get(key).filter(|value| !value.is_null()) {
+            meta.insert(&mut txn, key, any_in(value));
         }
     }
 
@@ -320,6 +329,27 @@ mod tests {
             meta.get(&txn, "name").map(|v| v.to_string(&txn)),
             Some("Sample".to_string())
         );
+    }
+
+    #[test]
+    fn seeds_portable_behavior_without_dropping_consent_or_page_and_block_configuration() {
+        use yrs::types::ToJson;
+        let mut content = sample_content();
+        content["consent"] = serde_json::json!({"content":"Read this", "requireSignature":true});
+        content["extensions"] =
+            serde_json::json!({"org.example.study":{"required":false,"data":{"version":2}}});
+        content["pages"][0]["settings"] = serde_json::json!({"timeLimit":5000});
+        content["pages"][0]["questions"] = serde_json::json!(["direct"]);
+        content["pages"][0]["blocks"][0]["layout"] = serde_json::json!({"type":"grid"});
+        content["pages"][0]["blocks"][0]["adaptive"] = serde_json::json!({"maxItems":1});
+        let doc = Doc::new();
+        seed_doc_from_content(&doc, &content);
+        let txn = doc.transact();
+        let meta = serde_json::to_value(txn.get_map("meta").unwrap().to_json(&txn)).unwrap();
+        let pages = serde_json::to_value(txn.get_array("pages").unwrap().to_json(&txn)).unwrap();
+        assert_eq!(meta["consent"], content["consent"]);
+        assert_eq!(meta["extensions"], content["extensions"]);
+        assert_eq!(pages, content["pages"]);
     }
 
     #[test]

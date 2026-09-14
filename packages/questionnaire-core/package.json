@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
+    "./fixtures/formula-dependency-cases.json": "./fixtures/formula-dependency-cases.json",
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"

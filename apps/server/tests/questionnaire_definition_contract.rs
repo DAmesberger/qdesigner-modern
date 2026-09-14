@@ -724,7 +724,7 @@ async fn stable_question_identifiers_are_data_not_executable_field_names() {
 }
 
 #[tokio::test]
-async fn unsupported_tracer_capabilities_do_not_receive_a_valid_digest() {
+async fn unsupported_or_malformed_capabilities_do_not_receive_a_valid_digest() {
     let (project_id, _) = ids();
     for field in [
         "assets",
@@ -757,7 +757,9 @@ async fn unsupported_tracer_capabilities_do_not_receive_a_valid_digest() {
         assert!(result
             .diagnostics
             .iter()
-            .any(|d| d.code == "QDEF_CAPABILITY_UNSUPPORTED" && d.path == format!("/{field}")));
+            .any(|d| (d.code == "QDEF_CAPABILITY_UNSUPPORTED"
+                || d.code == "QDEF_BEHAVIOR_INVALID")
+                && d.path.starts_with(&format!("/{field}"))));
     }
 }
 

@@ -109,21 +109,27 @@ pub(super) async fn apply_prepared(
         let stored = sqlx::query_as::<_, StoredQuestionnaireRow>(
             "SELECT name,description,version AS revision,version_major,version_minor,version_patch,content,COALESCE(settings,'{}'::jsonb) AS settings FROM questionnaire_definitions WHERE id=$1 AND project_id=$2"
         ).bind(target.questionnaire_id).bind(input.project_id).fetch_one(&mut *tx).await?;
-        let document =
-            super::document_from_stored(StoredQuestionnaire::from(stored)).and_then(|document| {
-                let diagnostics = super::validate(&document);
-                if super::has_errors(&diagnostics) {
-                    Err(diagnostics)
-                } else {
-                    Ok(document)
-                }
-            });
+        let local_bindings =
+            super::source_bindings::local_targets(&stored.content, target.questionnaire_id);
+        let document = super::document_from_stored(
+            StoredQuestionnaire::from(stored),
+            Some(target.questionnaire_id),
+        )
+        .and_then(|document| {
+            let diagnostics = super::validate(&document);
+            if super::has_errors(&diagnostics) {
+                Err(diagnostics)
+            } else {
+                Ok(document)
+            }
+        });
         Some(CurrentDraft {
             id: target.questionnaire_id,
             revision,
             epoch,
             created_at,
             document,
+            local_bindings,
         })
     } else {
         None
@@ -179,7 +185,7 @@ pub(super) async fn apply_prepared(
         return Ok(result);
     }
     let now = chrono::Utc::now();
-    let (id, revision, epoch, created_at) = if let Some(prior) = current {
+    let (id, revision, epoch, created_at) = if let Some(prior) = current.as_ref() {
         let revision = prior
             .revision
             .checked_add(1)
@@ -201,10 +207,18 @@ pub(super) async fn apply_prepared(
             .await?;
     let mut settings =
         serde_json::to_value(&document.settings).map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !document.translations.is_empty() {
+        settings["translations"] = json!(document.translations);
+    }
     if let Some(locale) = &document.questionnaire.default_locale {
         settings["language"] = json!(locale);
     }
     let mut content = persisted_content(&document)?;
+    super::source_bindings::restore_targets(
+        &mut content,
+        id,
+        current.as_ref().map(|prior| &prior.local_bindings),
+    );
     content["id"] = json!(id);
     content["projectId"] = json!(input.project_id);
     content["organizationId"] = json!(organization_id);
@@ -265,6 +279,7 @@ struct CurrentDraft {
     epoch: i32,
     created_at: chrono::DateTime<chrono::Utc>,
     document: Result<QDefDocument, Vec<DefinitionDiagnostic>>,
+    local_bindings: super::source_bindings::LocalTargets,
 }
 
 fn persisted_content(document: &QDefDocument) -> Result<Value, ApiError> {
@@ -274,9 +289,20 @@ fn persisted_content(document: &QDefDocument) -> Result<Value, ApiError> {
         .structure
         .pages
         .iter()
-        .flat_map(|page| &page.blocks)
-        .flat_map(|block| &block.question_ids)
-        .chain(document.questions.keys())
+        .flat_map(|page| {
+            page.behavior
+                .get("questionIds")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .chain(
+                    page.blocks
+                        .iter()
+                        .flat_map(|block| block.question_ids.iter().map(String::as_str)),
+                )
+        })
+        .chain(document.questions.keys().map(String::as_str))
         .filter(|id| seen.insert(*id));
     for (order, id) in ordered_ids.enumerate() {
         let question = document.questions.get(id).ok_or_else(|| {
@@ -291,14 +317,33 @@ fn persisted_content(document: &QDefDocument) -> Result<Value, ApiError> {
     let pages: Vec<Value> = document.structure.pages.iter().map(|page| {
         let blocks: Vec<Value> = page.blocks.iter().map(|block| {
             let mut value = json!({"id": block.id, "pageId": page.id, "type": block.kind, "questions": block.question_ids});
+            value.as_object_mut().expect("Block is an object").extend(block.behavior.clone());
             if let Some(name) = &block.name { value["name"] = json!(name); }
             value
         }).collect();
         let mut value = json!({"id": page.id, "blocks": blocks});
+        value.as_object_mut().expect("Page is an object").extend(page.behavior.clone());
+        if let Some(references) = value.as_object_mut().unwrap().remove("questionIds") { value["questions"] = references; }
         if let Some(name) = &page.name { value["name"] = json!(name); }
         value
     }).collect();
-    Ok(json!({"questions": questions, "pages": pages, "variables": [], "flow": []}))
+    let variables: Vec<Value> = document
+        .variables
+        .iter()
+        .map(|(id, declaration)| {
+            let mut value = declaration.clone();
+            value["id"] = json!(id);
+            value
+        })
+        .collect();
+    let mut content = json!({"questions": questions, "pages": pages, "variables": variables, "flow": document.flow});
+    if let Some(consent) = &document.questionnaire.consent {
+        content["consent"] = consent.clone();
+    }
+    if !document.extensions.is_empty() {
+        content["extensions"] = json!(document.extensions);
+    }
+    Ok(content)
 }
 /// Snapshot the current questionnaire state into the versions table.
 ///

@@ -215,3 +215,59 @@ async fn system_roles_are_immutable_through_the_api() {
         "unknown permission token must be rejected: {json:?}"
     );
 }
+
+#[tokio::test]
+async fn draft_author_cannot_publish_through_the_native_update_route() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let author = register_user(&app).await;
+    let org = tenant.org_id;
+    let (status, result) = json_request(
+        &app,
+        "POST",
+        &format!("/api/organizations/{org}/members"),
+        Some(&owner.token),
+        Some(&serde_json::json!({"email":author.email,"role":"admin"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{result:?}");
+    let (status,role)=json_request(&app,"POST",&format!("/api/organizations/{org}/roles"),Some(&owner.token),Some(&serde_json::json!({"name":"Draft author","permissions":["questionnaire:read","questionnaire:write"]}))).await;
+    assert_eq!(status, StatusCode::CREATED, "{role:?}");
+    let (status, result) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/organizations/{org}/members/{}/custom-role", author.id),
+        Some(&owner.token),
+        Some(&serde_json::json!({"custom_role_id":role["id"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result:?}");
+    let uri = format!(
+        "/api/projects/{}/questionnaires/{}",
+        tenant.project_id, tenant.questionnaire_id
+    );
+    let (status, draft) = json_request(
+        &app,
+        "PATCH",
+        &uri,
+        Some(&author.token),
+        Some(&serde_json::json!({"description":"Authorized draft edit"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft:?}");
+    let (status, rejected) = json_request(
+        &app,
+        "PATCH",
+        &uri,
+        Some(&author.token),
+        Some(&serde_json::json!({"status":"published"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{rejected:?}");
+    let (_, after) = json_request(&app, "GET", &uri, Some(&author.token), None).await;
+    assert_eq!(after, draft, "Denied publication must not change the draft");
+}

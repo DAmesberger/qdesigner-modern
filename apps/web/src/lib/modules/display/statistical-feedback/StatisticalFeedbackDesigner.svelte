@@ -655,6 +655,12 @@
       <div class="grid-two">
         <div class="row">
           <label for="stats-questionnaire-id">Questionnaire ID</label>
+          {#if config.dataSource.questionnaireBinding}
+            <p class="text-sm text-muted-foreground" data-testid="stats-questionnaire-binding">
+              Source binding: {config.dataSource.questionnaireBinding}. Select a local questionnaire
+              you can read before publishing. This mapping stays in this installation.
+            </p>
+          {/if}
           <input
             id="stats-questionnaire-id"
             class="input"
@@ -704,6 +710,12 @@
       {#if config.sourceMode === 'participant-vs-cohort' || config.sourceMode === 'participant-vs-participant'}
         <div class="row">
           <label for="stats-participant-id">Primary Participant ID</label>
+          {#if config.dataSource.participantBinding}
+            <p class="text-sm text-muted-foreground" data-testid="stats-participant-binding">
+              Participant binding: {config.dataSource.participantBinding}. Enter the local
+              participant identifier.
+            </p>
+          {/if}
           <input
             id="stats-participant-id"
             class="input"
@@ -722,6 +734,15 @@
       {#if config.sourceMode === 'participant-vs-participant'}
         <div class="row">
           <label for="stats-compare-participant-id">Comparison Participant ID</label>
+          {#if config.dataSource.comparisonParticipantBinding}
+            <p
+              class="text-sm text-muted-foreground"
+              data-testid="stats-comparison-participant-binding"
+            >
+              Participant binding: {config.dataSource.comparisonParticipantBinding}. Enter the local
+              comparison participant identifier.
+            </p>
+          {/if}
           <input
             id="stats-compare-participant-id"
             class="input"

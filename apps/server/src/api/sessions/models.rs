@@ -557,11 +557,11 @@ pub(crate) fn normalize_index_value_type(
         .map(|raw| raw.to_ascii_lowercase());
 
     match raw_type.as_deref() {
-        Some("number" | "integer" | "float" | "double" | "reaction_time" | "stimulus_onset") => {
-            "number".into()
-        }
+        Some(
+            "number" | "integer" | "float" | "double" | "reaction_time" | "stimulus_onset" | "time",
+        ) => "number".into(),
         Some("boolean" | "bool") => "boolean".into(),
-        Some("date" | "time" | "datetime" | "timestamp") => {
+        Some("date" | "datetime" | "timestamp") => {
             if json_value_to_timestamp(value).is_some() {
                 "timestamp".into()
             } else {
@@ -667,54 +667,24 @@ pub(crate) fn normalize_variable_value(
     explicit_source: Option<&str>,
     definition: Option<&VariableDefinitionMetadata>,
 ) -> NormalizedVariableValue {
-    let payload = value.unwrap_or(Value::Null);
-    let mut raw_value = payload.clone();
-    let mut payload_value_type = explicit_value_type
+    // variable_value is the data itself. Protocol metadata has separate request
+    // fields; inspecting object keys here destroys score objects and user data.
+    let raw_value = value.unwrap_or(Value::Null);
+    let payload_value_type = explicit_value_type
         .map(str::trim)
-        .filter(|raw| !raw.is_empty())
-        .map(ToOwned::to_owned);
-    let mut payload_source = explicit_source
-        .map(str::trim)
-        .filter(|raw| !raw.is_empty())
-        .map(ToOwned::to_owned);
-
-    if let Value::Object(object) = &payload {
-        if let Some(inner_value) = object.get("value") {
-            raw_value = inner_value.clone();
-        }
-
-        if payload_value_type.is_none() {
-            payload_value_type = object
-                .get("valueType")
-                .or_else(|| object.get("type"))
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|raw| !raw.is_empty())
-                .map(ToOwned::to_owned);
-        }
-
-        if payload_source.is_none() {
-            payload_source = object
-                .get("source")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|raw| !raw.is_empty())
-                .map(ToOwned::to_owned);
-        }
-    }
+        .filter(|raw| !raw.is_empty());
+    let payload_source = explicit_source.map(str::trim).filter(|raw| !raw.is_empty());
 
     let value_type = normalize_index_value_type(
-        payload_value_type.as_deref(),
+        payload_value_type,
         definition.map(|item| item.declared_type.as_str()),
         &raw_value,
     );
     let source_kind = normalize_variable_source_kind(
-        payload_source
-            .as_deref()
-            .or_else(|| definition.map(|item| item.source_kind.as_str())),
+        payload_source.or_else(|| definition.map(|item| item.source_kind.as_str())),
     );
 
-    let numeric_value = if value_type == "number" {
+    let numeric_value = if value_type == "number" || raw_value.is_object() {
         json_value_to_f64(&raw_value)
     } else {
         None
@@ -753,6 +723,7 @@ pub(crate) async fn persist_session_variable(
     variable_name: &str,
     normalized: NormalizedVariableValue,
 ) -> Result<(), ApiError> {
+    lock_session_variable_projection(&mut *conn, session_id).await?;
     sqlx::query!(
         r#"
         INSERT INTO session_variables (session_id, variable_name, variable_value)
@@ -767,6 +738,54 @@ pub(crate) async fn persist_session_variable(
     .execute(&mut *conn)
     .await?;
 
+    persist_variable_index(&mut *conn, session_id, context, variable_name, &normalized).await?;
+    if variable_name.starts_with("score.") {
+        // Queryable score fields are projections, not additional participant values.
+        // Replacing or clearing a score also clears stale field projections. An
+        // explicitly persisted variable with the exact name takes precedence.
+        let fields = [
+            "value",
+            "z",
+            "tScore",
+            "stanine",
+            "percentile",
+            "itemsAnswered",
+            "itemsExpected",
+            "band",
+        ];
+        let keys: Vec<String> = fields
+            .iter()
+            .map(|field| format!("{variable_name}.{field}"))
+            .collect();
+        let explicit: Vec<String> = sqlx::query_scalar("SELECT variable_name FROM session_variables WHERE session_id=$1 AND variable_name=ANY($2)")
+            .bind(session_id).bind(&keys).fetch_all(&mut *conn).await?;
+        sqlx::query("DELETE FROM session_variable_index i WHERE i.session_id=$1 AND i.variable_name=ANY($2) AND NOT EXISTS (SELECT 1 FROM session_variables v WHERE v.session_id=i.session_id AND v.variable_name=i.variable_name)")
+            .bind(session_id).bind(&keys).execute(&mut *conn).await?;
+        for (field, key) in fields.iter().zip(keys) {
+            if explicit.contains(&key) {
+                continue;
+            }
+            if let Some(value) = normalized.raw_value.get(*field) {
+                let field_value = normalize_variable_value(
+                    Some(value.clone()),
+                    None,
+                    Some(&normalized.source_kind),
+                    None,
+                );
+                persist_variable_index(&mut *conn, session_id, context, &key, &field_value).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn persist_variable_index(
+    conn: &mut sqlx::PgConnection,
+    session_id: Uuid,
+    context: &SessionVariableContext,
+    variable_name: &str,
+    normalized: &NormalizedVariableValue,
+) -> Result<(), ApiError> {
     sqlx::query!(
         r#"
         INSERT INTO session_variable_index (
@@ -824,6 +843,9 @@ pub(crate) async fn refresh_session_variable_projection(
     conn: &mut sqlx::PgConnection,
     session_id: Uuid,
 ) -> Result<(), ApiError> {
+    // Lock before reading: a refresh must not rewrite values from a stale snapshot
+    // after waiting for a concurrently committed sync.
+    lock_session_variable_projection(&mut *conn, session_id).await?;
     let context = fetch_session_variable_context(&mut *conn, session_id).await?;
     let rows = sqlx::query_as::<_, SessionVariableRecord>(
         r#"
@@ -858,6 +880,19 @@ pub(crate) async fn refresh_session_variable_projection(
             .await?;
     }
 
+    Ok(())
+}
+
+async fn lock_session_variable_projection(
+    conn: &mut sqlx::PgConnection,
+    session_id: Uuid,
+) -> Result<(), ApiError> {
+    // Root score and explicit dotted-field writes share this session lock. The
+    // weaker row mode remains compatible with response/trial foreign-key checks.
+    sqlx::query("SELECT id FROM sessions WHERE id=$1 FOR NO KEY UPDATE")
+        .bind(session_id)
+        .fetch_one(&mut *conn)
+        .await?;
     Ok(())
 }
 

@@ -369,6 +369,8 @@ export class VariableEngine {
   private validateType(value: DynamicValue, type: VariableType): DynamicValue {
     switch (type) {
       case 'number': {
+        // Unanswered numeric questions are missing observations, not zero scores.
+        if (value === null || value === undefined) return null;
         const parsed = Number(value);
         if (Number.isNaN(parsed)) {
           throw new Error(`Value ${value} is not a valid number`);
