@@ -16,7 +16,22 @@ export function portableBehaviorDefinition(name: string) {
       },
     },
     assets: {},
-    variables: {},
+    variables: {
+      cohortWellbeing: {
+        name: 'cohortWellbeing',
+        type: 'object',
+        scope: 'global',
+        server: {
+          source: 'variable',
+          key: 'score.wellbeing.value',
+          minN: 1,
+          dataset: {
+            id: 'wellbeing-at-least-three',
+            where: [{ var: 'score.wellbeing', op: 'gte', value: 3 }],
+          },
+        },
+      },
+    },
     questions: {
       age: {
         type: 'number-input',

@@ -132,13 +132,13 @@ test('@fullstack portable behavior survives designer publication and produces co
           consent: { accepted: true, checkboxes: { agree: true }, signature: `Participant ${age}` },
         },
       });
+      const variablesResponse = await request.get(`/api/sessions/${sessionId}/variables`, {
+        headers: { Cookie: `qd_session=${workspace.sessionCookie}` },
+      });
+      expect(variablesResponse.status(), await variablesResponse.text()).toBe(200);
+      const variables: { variable_name: string; variable_value: unknown }[] =
+        await variablesResponse.json();
       if (age >= 18) {
-        const variablesResponse = await request.get(`/api/sessions/${sessionId}/variables`, {
-          headers: { Cookie: `qd_session=${workspace.sessionCookie}` },
-        });
-        expect(variablesResponse.status(), await variablesResponse.text()).toBe(200);
-        const variables: { variable_name: string; variable_value: unknown }[] =
-          await variablesResponse.json();
         expect(
           variables.find((v) => v.variable_name === 'score.wellbeing')?.variable_value
         ).toMatchObject({
@@ -150,6 +150,9 @@ test('@fullstack portable behavior survives designer publication and produces co
         });
         expect(stored.metadata.screenOut).toBeUndefined();
       } else {
+        expect(
+          variables.find((v) => v.variable_name === 'score.wellbeing')?.variable_value
+        ).toMatchObject({ value: null, itemsAnswered: 0, itemsExpected: 2 });
         await expect
           .poll(
             async () => (await getSessionById(request, sessionId, workspace)).metadata.screenOut,
@@ -168,4 +171,17 @@ test('@fullstack portable behavior survives designer publication and produces co
       await context.close();
     }
   }
+  await expect
+    .poll(async () => {
+      const response = await request.get(
+        `/api/sessions/aggregate?questionnaire_id=${questionnaireId}&source=variable&key=score.wellbeing.value`,
+        {
+          headers: { Cookie: `qd_session=${workspace.sessionCookie}` },
+        }
+      );
+      expect(response.status(), await response.text()).toBe(200);
+      const body = await response.json();
+      return body.stats;
+    })
+    .toMatchObject({ sample_count: 1, mean: 4 });
 });

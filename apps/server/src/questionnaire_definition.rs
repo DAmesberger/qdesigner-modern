@@ -10,6 +10,7 @@ mod catalogue;
 mod diff;
 mod edits;
 mod formula_references;
+mod variable_catalogue;
 mod persistence;
 mod projections;
 mod safety;

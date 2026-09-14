@@ -76,18 +76,19 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
             );
         }
     }
-    let resolve_variable = |name: &str| {
-        variables
-            .get(name)
-            .or_else(|| names.get(name).and_then(|id| variables.get(*id)))
-    };
+    let catalogue = super::variable_catalogue::build(value, out);
+    let resolve_variable = |name: &str| catalogue.get(name);
     let mut dependencies: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     for (id, var) in variables {
         let path = format!("/variables/{}", pointer_segment(id));
         if let Some(default) = var.get("defaultValue").filter(|v| !v.is_null()) {
             let valid = match text(&var["type"]) {
-                "number" | "reaction_time" | "stimulus_onset" => default.is_number(),
-                "string" | "date" | "time" => default.is_string(),
+                "number" | "reaction_time" | "stimulus_onset" | "time" => default.is_number(),
+                "string" => default.is_string(),
+                "date" => default.as_str().is_some_and(|date| {
+                    chrono::DateTime::parse_from_rfc3339(date).is_ok()
+                        || chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok()
+                }),
                 "boolean" => default.is_boolean(),
                 "array" => default.is_array(),
                 "object" => default.is_object(),
@@ -151,7 +152,7 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
                     out,
                     format!("{path}/server/key"),
                     key,
-                    resolve_variable(key).is_some() || key.starts_with("score."),
+                    resolve_variable(key).is_some(),
                 ),
                 "response" => reference(
                     out,
@@ -242,6 +243,24 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
                 }
             }
             if let Some(loop_config) = block.get("loop") {
+                let required_source = match text(&loop_config["source"]["type"]) {
+                    "answer" => Some("questionId"),
+                    "variable" => Some("variableId"),
+                    _ => None,
+                };
+                if let Some(field) = required_source {
+                    if loop_config["source"][field]
+                        .as_str()
+                        .is_none_or(|id| id.is_empty())
+                    {
+                        issue(
+                            out,
+                            "QDEF_REFERENCE_NOT_FOUND",
+                            format!("{path}/loop/source/{field}"),
+                            "This loop source requires a target.",
+                        );
+                    }
+                }
                 if let Some(id) = loop_config["source"]["questionId"].as_str() {
                     reference(
                         out,
@@ -396,6 +415,16 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
         }
         let key = text(&widget["binding"]["key"]);
         let valid = if text(&widget["type"]) == "reaction-cohort-box" {
+            if questions.get(key).is_some_and(|q| {
+                !["reaction-time", "reaction-experiment", "webgl"].contains(&text(&q["type"]))
+            }) {
+                issue(
+                    out,
+                    "QDEF_TYPE_MISMATCH",
+                    format!("{path}/binding/key"),
+                    "A reaction report requires a question that produces reaction trials.",
+                );
+            }
             questions.contains_key(key)
         } else if text(&widget["binding"]["source"]) == "score" {
             scale_ids.contains(key)

@@ -8,6 +8,143 @@ use common::{build_test_state, json_request, provision_tenant, register_user, te
 mod behavior_cases;
 
 #[tokio::test]
+async fn preserved_score_objects_support_filtered_and_dotted_server_aggregates() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let collection = format!("/api/projects/{}/questionnaires", tenant.project_id);
+    let mut declarations = [
+        ("root", "score.wellbeing", json!({})),
+        ("filtered", "score.wellbeing", json!({"where":[{"var":"score.wellbeing","op":"gte","value":15}]})),
+        ("field", "score.wellbeing.value", json!({})),
+        ("normed", "score.wellbeing.tScore", json!({})),
+        ("timingFiltered", "elapsed", json!({"where":[{"var":"elapsed","op":"gte","value":1500}]})),
+    ].into_iter().map(|(name,key,dataset)| json!({"id":name,"name":name,"type":"object","scope":"global","server":{"source":"variable","key":key,"minN":1,"dataset":dataset}})).collect::<Vec<_>>();
+    declarations.push(json!({"id":"elapsed","name":"elapsed","type":"time","scope":"global"}));
+    let (status, created) = json_request(&app,"POST",&collection,Some(&owner.token),Some(&json!({"name":"Score aggregate study","content":{"pages":[],"questions":[],"flow":[],"variables":declarations}}))).await;
+    assert_eq!(status, StatusCode::CREATED, "{created:?}");
+    let qid = created["id"].as_str().unwrap();
+    let (status, published) = json_request(
+        &app,
+        "POST",
+        &format!("{collection}/{qid}/publish"),
+        Some(&owner.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{published:?}");
+    let mut session_ids = Vec::new();
+    for value in [10, 20] {
+        let (status, session) = json_request(
+            &app,
+            "POST",
+            "/api/sessions",
+            None,
+            Some(&json!({"questionnaire_id":qid})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{session:?}");
+        let sid = session["id"].as_str().unwrap();
+        session_ids.push(sid.to_owned());
+        let score = json!({"value":value,"tScore":value+40,"itemsAnswered":2,"itemsExpected":2});
+        for _ in 0..2 {
+            let (status,synced)=json_request(&app,"POST",&format!("/api/sessions/{sid}/sync"),None,Some(&json!({"variables":[{"variable_name":"score.wellbeing","variable_value":score},{"variable_name":"elapsed","variable_value":value*100}],"responses":[],"events":[],"status":"completed"}))).await;
+            assert_eq!(status, StatusCode::OK, "{synced:?}");
+        }
+        let (_, stored) = json_request(
+            &app,
+            "GET",
+            &format!("/api/sessions/{sid}/variables"),
+            Some(&owner.token),
+            None,
+        )
+        .await;
+        let rows = stored.as_array().unwrap();
+        assert_eq!(
+            rows.len(),
+            2,
+            "Derived index fields must not become extra participant values"
+        );
+        assert_eq!(
+            rows.iter()
+                .find(|v| v["variable_name"] == "score.wellbeing")
+                .unwrap()["variable_value"],
+            score
+        );
+        assert_eq!(
+            rows.iter()
+                .find(|v| v["variable_name"] == "elapsed")
+                .unwrap()["variable_value"],
+            value * 100
+        );
+    }
+    let (status, result) = json_request(
+        &app,
+        "GET",
+        &format!("/api/questionnaires/{qid}/server-variables"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result:?}");
+    for (name, count, mean) in [
+        ("root", 2, 15.0),
+        ("filtered", 1, 20.0),
+        ("field", 2, 15.0),
+        ("normed", 2, 55.0),
+        ("timingFiltered", 1, 2000.0),
+    ] {
+        let output = result["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == name)
+            .unwrap();
+        assert_eq!(output["sample_count"], count, "{name}: {output:?}");
+        assert_eq!(output["stats"]["mean"], mean, "{name}: {output:?}");
+    }
+    // A correction removes tScore; stale derived rows must not keep contributing.
+    let sid = &session_ids[0];
+    let (status, synced) = json_request(&app,"POST",&format!("/api/sessions/{sid}/sync"),None,Some(&json!({"variables":[{"variable_name":"score.wellbeing","variable_value":{"value":5}}],"responses":[],"events":[]}))).await;
+    assert_eq!(status, StatusCode::OK, "{synced:?}");
+    // Researcher aggregates read current projections. Participant snapshots have
+    // the documented five-minute recalculation cadence and can still be cached.
+    for (key, count, mean) in [
+        ("score.wellbeing", 2, 12.5),
+        ("score.wellbeing.value", 2, 12.5),
+        ("score.wellbeing.tScore", 1, 60.0),
+    ] {
+        let (status, output) = json_request(
+            &app,
+            "GET",
+            &format!("/api/sessions/aggregate?questionnaire_id={qid}&source=variable&key={key}"),
+            Some(&owner.token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{output:?}");
+        assert_eq!(output["stats"]["sample_count"], count, "{key}: {output:?}");
+        assert_eq!(output["stats"]["mean"], mean, "{key}: {output:?}");
+    }
+    // Root/field syncs may overlap. An exact participant variable must retain
+    // precedence over a derived index field regardless of commit order.
+    let sync_uri = format!("/api/sessions/{sid}/sync");
+    let root_update = json!({"variables":[{"variable_name":"score.wellbeing","variable_value":{"value":3}}],"responses":[],"events":[]});
+    let field_update = json!({"variables":[{"variable_name":"score.wellbeing.value","variable_value":99}],"responses":[],"events":[]});
+    let (root_result, field_result) = tokio::join!(
+        json_request(&app, "POST", &sync_uri, None, Some(&root_update)),
+        json_request(&app, "POST", &sync_uri, None, Some(&field_update))
+    );
+    assert_eq!(root_result.0, StatusCode::OK, "{:?}", root_result.1);
+    assert_eq!(field_result.0, StatusCode::OK, "{:?}", field_result.1);
+    let (_,output)=json_request(&app,"GET",&format!("/api/sessions/aggregate?questionnaire_id={qid}&source=variable&key=score.wellbeing.value"),Some(&owner.token),None).await;
+    assert_eq!(output["stats"]["mean"], 59.5, "{output:?}");
+}
+
+#[tokio::test]
 async fn self_binding_cannot_publish_with_another_authorized_questionnaire_as_its_target() {
     let Some(state) = build_test_state().await else {
         return;

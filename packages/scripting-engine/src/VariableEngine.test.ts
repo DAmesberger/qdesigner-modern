@@ -11,6 +11,21 @@ describe('VariableEngine', () => {
   });
 
   describe('Basic variable operations', () => {
+    it('preserves missing numeric answers instead of scoring them as zero', () => {
+      engine.registerVariable({
+        id: 'answer_value',
+        name: 'answer',
+        type: 'number',
+        scope: 'global',
+        defaultValue: null,
+      });
+      expect(engine.getAllVariables().answer).toBeNull();
+      engine.setVariable('answer_value', 0);
+      expect(engine.getAllVariables().answer).toBe(0);
+      engine.setVariable('answer_value', null);
+      expect(engine.getAllVariables().answer).toBeNull();
+    });
+
     it('should register and retrieve a simple variable', () => {
       const variable: Variable = {
         id: 'var1',

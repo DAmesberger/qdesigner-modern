@@ -10,6 +10,190 @@ use uuid::Uuid;
 mod behavior_cases;
 
 #[tokio::test]
+async fn timing_defaults_are_numeric_and_date_defaults_must_be_valid_portable_dates() {
+    for (kind, default, valid) in [
+        ("time", json!(1500), true),
+        ("time", json!("12:00"), false),
+        ("date", json!("2026-09-14"), true),
+        ("date", json!("2026-09-14T12:00:00Z"), true),
+        ("date", json!("not-a-date"), false),
+    ] {
+        let mut input = fixture();
+        input["variables"]["typedDefault"] =
+            json!({"name":"typedDefault","type":kind,"scope":"global","defaultValue":default});
+        let result = inspect(input).await;
+        assert_eq!(
+            result.valid, valid,
+            "{kind}/{default}: {:?}",
+            result.diagnostics
+        );
+        if !valid {
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.path == "/variables/typedDefault/defaultValue"),
+                "{:?}",
+                result.diagnostics
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn generated_identities_cannot_overwrite_authored_variables_and_loop_names_match_runtime() {
+    for (id, name) in [
+        ("score_value", "custom"),
+        ("custom", "score"),
+        ("_participantId", "custom"),
+        ("score.wellbeing", "custom"),
+        ("custom", "score.wellbeing.value"),
+    ] {
+        let mut input = fixture();
+        input["variables"][id] = json!({"name":name,"type":"object","scope":"global"});
+        let result = inspect(input).await;
+        assert!(!result.valid, "Accepted collision {id}/{name}");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_DUPLICATE_ID"),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+    for question_id in ["score_value", "followup__0"] {
+        let mut input = fixture();
+        input["questions"][question_id] =
+            json!({"type":"number-input","required":false,"config":{}});
+        let result = inspect(input).await;
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_DUPLICATE_ID"
+                    && d.path == format!("/questions/{question_id}")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+    let mut input = fixture();
+    input["structure"]["pages"][0]["blocks"][3]["loop"]["loopVariableName"] =
+        json!("participantId");
+    let result = inspect(input).await;
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_DUPLICATE_ID" && d.path.ends_with("/loopVariableName")),
+        "{:?}",
+        result.diagnostics
+    );
+    let mut input = fixture();
+    input["variables"]["scale"]["name"] = json!("customTheta");
+    input["structure"]["pages"][0]["blocks"][4]["adaptive"]["thetaReportVariable"] =
+        json!("customTheta");
+    let result = inspect(input).await;
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_DUPLICATE_ID" && d.path == "/variables/scale/name"),
+        "{:?}",
+        result.diagnostics
+    );
+    for (key, valid) in [
+        ("followup__0", true),
+        ("followup__1_value", true),
+        ("followup__1_rt", true),
+        ("followup__2", false),
+        ("followup__01", false),
+        ("unusedLegacyLoopName", false),
+    ] {
+        let mut input = fixture();
+        input["structure"]["pages"][0]["blocks"][3]["loop"]["variable"] =
+            json!("unusedLegacyLoopName");
+        input["variables"]["dependent"] =
+            json!({"name":"dependent","type":"number","scope":"global","dependencies":[key]});
+        let result = inspect(input).await;
+        assert_eq!(result.valid, valid, "{key}: {:?}", result.diagnostics);
+    }
+}
+
+#[tokio::test]
+async fn references_resolve_runtime_generated_variables_and_precise_score_fields() {
+    for key in [
+        "score",
+        "score_value",
+        "score_rt",
+        "participantId",
+        "_participantId",
+        "theta",
+        "generatedTheta",
+        "score.wellbeing.value",
+    ] {
+        let mut input = fixture();
+        input["structure"]["pages"][0]["blocks"][4]["adaptive"]["thetaReportVariable"] =
+            json!("generatedTheta");
+        input["variables"]["derived"] =
+            json!({"name":"derived","type":"number","scope":"global","dependencies":[key]});
+        input["settings"]["report"]["widgets"] = json!([{"id":"runtime-output","type":"score-tile","position":{"x":0,"y":0,"w":6,"h":2},"binding":{"source":"variable","key":key}}]);
+        let result = inspect(input).await;
+        assert!(result.valid, "{key}: {:?}", result.diagnostics);
+    }
+}
+
+#[tokio::test]
+async fn missing_loop_sources_unknown_score_paths_and_nonreaction_report_inputs_are_rejected() {
+    for (path, replacement, diagnostic_path) in [
+        (
+            "/structure/pages/0/blocks/3/loop/source",
+            json!({"type":"answer"}),
+            "/structure/pages/0/blocks/3/loop/source/questionId",
+        ),
+        (
+            "/structure/pages/0/blocks/3/loop/source",
+            json!({"type":"variable"}),
+            "/structure/pages/0/blocks/3/loop/source/variableId",
+        ),
+        (
+            "/variables/cohort/server/key",
+            json!("score.missing.value"),
+            "/variables/cohort/server/key",
+        ),
+        (
+            "/variables/cohort/server/key",
+            json!("score.wellbeing.missing"),
+            "/variables/cohort/server/key",
+        ),
+    ] {
+        let mut input = fixture();
+        input["variables"]["cohort"]["server"]["source"] = json!("variable");
+        *input.pointer_mut(path).unwrap() = replacement;
+        let result = inspect(input).await;
+        assert!(!result.valid, "Accepted {path}");
+        assert!(
+            result.diagnostics.iter().any(|d| d.path == diagnostic_path),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+    let mut input = fixture();
+    input["settings"]["report"]["widgets"] = json!([{"id":"wrong-trials","type":"reaction-cohort-box","position":{"x":0,"y":0,"w":6,"h":2},"binding":{"source":"variable","key":"followup"}}]);
+    let result = inspect(input).await;
+    assert!(!result.valid);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_TYPE_MISMATCH"
+                && d.path == "/settings/report/widgets/0/binding/key"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[tokio::test]
 async fn behavioral_variants_normalize_idempotently_without_losing_fields() {
     for (name, document) in behavior_cases::cases() {
         let first = inspect(document.clone()).await;
@@ -89,9 +273,9 @@ async fn complete_behavior_is_portable_and_normalization_is_idempotent() {
 async fn broken_behavioral_references_and_types_have_stable_paths() {
     for (path, replacement, expected) in [
         (
-            "/variables/eligible/dependencies/0",
+            "/variables/adultEligible/dependencies/0",
             json!("missing"),
-            "/variables/eligible/dependencies/0",
+            "/variables/adultEligible/dependencies/0",
         ),
         (
             "/variables/age/defaultValue",
@@ -152,7 +336,7 @@ async fn broken_behavioral_references_and_types_have_stable_paths() {
         );
     }
     let mut input = fixture();
-    input["variables"]["age"]["dependencies"] = json!(["eligible"]);
+    input["variables"]["age"]["dependencies"] = json!(["adultEligible"]);
     let result = inspect(input).await;
     assert!(
         result

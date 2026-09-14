@@ -57,6 +57,7 @@ export default defineConfig({
       'monaco-editor': path.resolve('./tests/setup/monaco-editor-stub.ts'),
       '@qdesigner/contracts/generated': path.resolve('../../packages/contracts/src/generated'),
       '@qdesigner/contracts': path.resolve('../../packages/contracts/src/index.ts'),
+      '@qdesigner/questionnaire-core/fixtures/formula-dependency-cases.json': path.resolve('../../packages/questionnaire-core/fixtures/formula-dependency-cases.json'),
       '@qdesigner/questionnaire-core/questionnaire': path.resolve('../../packages/questionnaire-core/src/questionnaire.ts'),
       '@qdesigner/questionnaire-core/response': path.resolve('../../packages/questionnaire-core/src/response.ts'),
       '@qdesigner/questionnaire-core/media': path.resolve('../../packages/questionnaire-core/src/media.ts'),
