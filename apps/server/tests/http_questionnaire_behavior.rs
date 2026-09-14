@@ -269,3 +269,80 @@ async fn self_cohort_bindings_resolve_to_each_imported_questionnaire_identity() 
         assert_eq!(exported["canonical"], imported["canonical"]);
     }
 }
+
+#[tokio::test]
+async fn synced_variable_values_preserve_score_objects_and_payload_metadata_keys() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let (status, published) = json_request(
+        &app,
+        "POST",
+        &format!(
+            "/api/projects/{}/questionnaires/{}/publish",
+            tenant.project_id, tenant.questionnaire_id
+        ),
+        Some(&owner.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{published:?}");
+    let (status, session) = json_request(
+        &app,
+        "POST",
+        "/api/sessions",
+        None,
+        Some(&json!({"questionnaire_id":tenant.questionnaire_id})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{session:?}");
+    let sid = session["id"].as_str().unwrap();
+    let values = json!({
+        "score.wellbeing":{"value":4,"z":1,"tScore":60,"itemsAnswered":2,"itemsExpected":2},
+        "payload":{"value":5,"type":"number","source":"authored data","valueType":"object"},
+        "empty":null,"count":4,"enabled":true,"items":[1,{"value":2}]
+    });
+    let variables: Vec<Value> = values
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(name, value)| json!({"variable_name":name,"variable_value":value}))
+        .collect();
+    // Retrying the same sync and rebuilding indices must not peel another layer
+    // from structured values or interpret their data keys as protocol metadata.
+    for _ in 0..2 {
+        let (status, synced) = json_request(
+            &app,
+            "POST",
+            &format!("/api/sessions/{sid}/sync"),
+            None,
+            Some(&json!({"variables":variables,"responses":[],"events":[]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{synced:?}");
+        let (status, stored) = json_request(
+            &app,
+            "GET",
+            &format!("/api/sessions/{sid}/variables"),
+            Some(&owner.token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{stored:?}");
+        for (name, value) in values.as_object().unwrap() {
+            let row = stored
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["variable_name"] == *name)
+                .unwrap();
+            assert_eq!(
+                &row["variable_value"], value,
+                "Variable {name} changed during ingestion"
+            );
+        }
+    }
+}

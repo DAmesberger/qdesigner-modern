@@ -66,13 +66,15 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 /** Drive the runtime by submitting a plain answer to every presented item until it ends. */
 async function runToCompletion(
   flow: FlowControl[],
-  questionnaire: Questionnaire = fixture(flow)
+  questionnaire: Questionnaire = fixture(flow),
+  sessionId?: string
 ): Promise<QuestionnaireSession> {
   const host = capturingHost();
   let completed: QuestionnaireSession | undefined;
   const runtime = new QuestionnaireRuntime({
     canvas: document.createElement('canvas'),
     questionnaire,
+    sessionId,
     formHost: host,
     onComplete: (session: QuestionnaireSession) => {
       completed = session;
@@ -128,6 +130,22 @@ describe('QuestionnaireRuntime flow-terminate screen-out (F-20)', () => {
     expect(session.metadata?.screenOut?.ruleId).toBe('f-screenout');
     // Screened out on page 1 — q2 (page 2) never presented, so no answer for it.
     expect(session.responses.some((r) => r.questionId === 'q2')).toBe(false);
+  });
+
+  it('returns completion metadata under the authoritative persisted session identity', async () => {
+    const id = '26bbfb41-8050-4fdb-8757-61c0f435f080';
+    const flow: FlowControl[] = [
+      {
+        id: 'adults',
+        type: 'terminate',
+        condition: 'true',
+        source: 'p1',
+        screenOutReason: 'under-age',
+      },
+    ];
+    const session = await runToCompletion(flow, fixture(flow), id);
+    expect(session.id).toBe(id);
+    expect(session.metadata?.screenOut?.reason).toBe('under-age');
   });
 
   it('completes normally for a bare terminate rule (no screen-out fields)', async () => {

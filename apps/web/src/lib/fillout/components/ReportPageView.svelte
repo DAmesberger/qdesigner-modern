@@ -11,10 +11,7 @@
   authenticated online tool with a different lifecycle.
 -->
 <script lang="ts">
-  import type {
-    ReportPageConfig,
-    ReportWidget,
-  } from '@qdesigner/questionnaire-core';
+  import type { ReportPageConfig, ReportWidget } from '@qdesigner/questionnaire-core';
   import type { QuestionnaireSession } from '$lib/shared';
   import {
     resolveStatisticalFeedbackSeries,
@@ -43,13 +40,7 @@
     reportTitle?: string;
   }
 
-  let {
-    reportConfig,
-    variables = {},
-    scoreConfigs = [],
-    session,
-    reportTitle,
-  }: Props = $props();
+  let { reportConfig, variables = {}, scoreConfigs = [], session, reportTitle }: Props = $props();
 
   const columns = $derived(reportConfig.layout?.columns ?? 12);
   const rowHeight = $derived(reportConfig.layout?.rowHeight ?? 80);
@@ -158,9 +149,7 @@
   // Score-tile interpretation — reuse the ScoreInterpreter band, if a scale
   // matches this widget's binding.
   // ---------------------------------------------------------------------------
-  function tileInterpretation(
-    widget: ReportWidget
-  ): { label: string; color: string } | null {
+  function tileInterpretation(widget: ReportWidget): { label: string; color: string } | null {
     const value = numericValue(widget);
     if (value === null) return null;
     const scaleId = widget.binding.key;
@@ -213,19 +202,40 @@
     return `grid-column: ${col} / span ${span}; grid-row: ${y + 1} / span ${Math.max(1, h)};`;
   }
 
-  const showPdf = $derived(reportConfig.enablePdfDownload && scoreConfigs.length > 0);
+  // Report score tiles already declare their numeric source. They must remain
+  // downloadable without a second, separately supplied interpretation config.
+  const reportScoreConfigs = $derived.by(() => {
+    const configs = new Map(scoreConfigs.map((config) => [config.variableId, config]));
+    for (const widget of widgets) {
+      if (widget.type !== 'score-tile') continue;
+      const key = bindingKey(widget);
+      if (!configs.has(key)) {
+        configs.set(key, {
+          variableId: key,
+          scaleName: widget.text || widget.binding.key,
+          ranges: [],
+        });
+      }
+    }
+    return [...configs.values()];
+  });
+  const showPdf = $derived(reportConfig.enablePdfDownload && reportScoreConfigs.length > 0);
 
   async function handleDownload(): Promise<void> {
-    if (generatingReport || scoreConfigs.length === 0) return;
+    if (generatingReport || reportScoreConfigs.length === 0) return;
     generatingReport = true;
     try {
       const config: ReportConfig = {
         title: reportTitle || reportConfig.title || 'Participant Report',
         participantId: session?.participantId ?? undefined,
-        scoreConfigs,
+        scoreConfigs: reportScoreConfigs,
         includeChart: true,
       };
-      await generateReport(config, { variables });
+      const reportVariables = { ...variables };
+      for (const score of reportScoreConfigs) {
+        reportVariables[score.variableId] = resolveValue(score.variableId);
+      }
+      await generateReport(config, { variables: reportVariables });
     } catch (err) {
       console.error('Failed to generate report PDF:', err);
     } finally {
@@ -254,14 +264,20 @@
           {#if widget.type === 'score-tile' || widget.type === 'gauge'}
             {@const value = numericValue(widget)}
             {#if widget.type === 'gauge'}
-              <GaugeChart {value} label={widget.text ?? ''} height={rowHeight * (widget.position.h ?? 2) - 24} />
+              <GaugeChart
+                {value}
+                label={widget.text ?? ''}
+                height={rowHeight * (widget.position.h ?? 2) - 24}
+              />
             {:else}
               {@const interp = tileInterpretation(widget)}
               <div class="tile">
                 {#if widget.text}<span class="tile-label">{widget.text}</span>{/if}
                 <strong class="tile-value">{formatNumber(value)}</strong>
                 {#if interp}
-                  <span class="tile-band" style="background-color: {interp.color}">{interp.label}</span>
+                  <span class="tile-band" style="background-color: {interp.color}"
+                    >{interp.label}</span
+                  >
                 {/if}
               </div>
             {/if}
@@ -280,7 +296,9 @@
                 height={rowHeight * Math.max(1, widget.position.h ?? 3) - 32}
               />
               {#if series.normSource}
-                <p class="widget-caption" data-testid="report-cohort-caption">{series.normSource}</p>
+                <p class="widget-caption" data-testid="report-cohort-caption">
+                  {series.normSource}
+                </p>
               {/if}
             {:catch}
               <div class="widget-error">Feedback unavailable.</div>
@@ -313,7 +331,9 @@
             </table>
           {:else if widget.type === 'completion-meta'}
             <div class="meta">
-              {#if durationLabel}<div><span>Time taken</span><strong>{durationLabel}</strong></div>{/if}
+              {#if durationLabel}<div>
+                  <span>Time taken</span><strong>{durationLabel}</strong>
+                </div>{/if}
               {#if session?.responses?.length}
                 <div><span>Answered</span><strong>{session.responses.length}</strong></div>
               {/if}

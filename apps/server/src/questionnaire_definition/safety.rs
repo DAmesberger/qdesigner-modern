@@ -111,9 +111,9 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                                 | "ThisExpression"
                         )
                     });
-                let executable_url =
-                    matches!(normalized.as_str(), "url" | "href" | "src" | "action")
-                        && child.as_str().is_some_and(active_url);
+                let executable_url = (normalized.ends_with("url")
+                    || matches!(normalized.as_str(), "href" | "src" | "action"))
+                    && child.as_str().is_some_and(active_url);
                 if executable_field || javascript_language || javascript_node || executable_url {
                     reject(&child_path, diagnostics);
                 } else {

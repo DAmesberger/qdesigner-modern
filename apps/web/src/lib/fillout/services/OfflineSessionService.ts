@@ -11,6 +11,30 @@ type SessionMetadata = Record<string, unknown> | undefined;
  * Sessions are created client-side with crypto.randomUUID() — no server round-trip needed.
  */
 export class OfflineSessionService {
+  /** Encrypt outside the transaction, then commit only against the snapshot
+   * that was read. A concurrent progress/completion update retries its merge. */
+  private static async mutateSession(
+    sessionId: string,
+    makePatch: (session: FilloutSession) => Promise<Partial<FilloutSession>>
+  ): Promise<void> {
+    for (;;) {
+      const snapshot = await db.filloutSessions.get(sessionId);
+      if (!snapshot) return;
+      const patch = await makePatch(snapshot);
+      const committed = await db.transaction('rw', db.filloutSessions, async () => {
+        const current = await db.filloutSessions.get(sessionId);
+        if (!current || (current.syncRevision ?? 0) !== (snapshot.syncRevision ?? 0)) return false;
+        await db.filloutSessions.update(sessionId, {
+          ...patch,
+          syncRevision: (current.syncRevision ?? 0) + 1,
+          updatedAt: Date.now(),
+          synced: 0,
+        });
+        return true;
+      });
+      if (committed) return;
+    }
+  }
   /**
    * E-OFF-2: encrypt a session's `metadata` blob (consent, url params,
    * fingerprint, progress) at rest. `browserInfo`/version/status stay cleartext —
@@ -92,27 +116,31 @@ export class OfflineSessionService {
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     const existing = await db.filloutSessions.get(input.id);
+    // The session's version pin is immutable. Reopening an existing pin must
+    // preserve pending completion metadata, cursor and its acknowledgement token.
+    if (existing) return;
     // New metadata is encrypted; when absent, keep the existing (already
     // encrypted) row value untouched.
     const metadata =
-      input.metadata !== undefined
-        ? await this.encryptMeta(input.id, input.metadata)
-        : existing?.metadata;
+      input.metadata !== undefined ? await this.encryptMeta(input.id, input.metadata) : undefined;
     const session: FilloutSession = {
       id: input.id,
       questionnaireId: input.questionnaireId,
-      status: existing?.status ?? 'active',
+      status: 'active',
       versionMajor: input.versionMajor,
       versionMinor: input.versionMinor,
       versionPatch: input.versionPatch,
-      participantId: input.participantId ?? existing?.participantId,
+      participantId: input.participantId,
       metadata,
-      browserInfo: existing?.browserInfo,
-      createdAt: existing?.createdAt ?? Date.now(),
-      completedAt: existing?.completedAt,
+      createdAt: Date.now(),
       synced: 1,
     };
-    await db.filloutSessions.put(session);
+    try {
+      await db.filloutSessions.add(session);
+    } catch (error) {
+      // Another tab may have pinned the same server session after our read.
+      if (!(error instanceof Error) || error.name !== 'ConstraintError') throw error;
+    }
   }
 
   /**
@@ -152,24 +180,19 @@ export class OfflineSessionService {
       answeredQuestionIds?: string[];
     }
   ): Promise<void> {
-    const session = await db.filloutSessions.get(sessionId);
-    if (!session) return;
-
-    // Decrypt the current metadata before merging, then re-encrypt the result.
-    const currentMeta = (await this.decryptMeta(sessionId, session.metadata)) ?? {};
-    const patch: Partial<FilloutSession> = {
-      metadata: await this.encryptMeta(sessionId, { ...currentMeta, progress }),
-      updatedAt: Date.now(),
-      synced: 0,
-    };
-    if (cursor) {
-      if (cursor.lastItemIndex !== undefined) patch.lastItemIndex = cursor.lastItemIndex;
-      if (cursor.lastPageId !== undefined) patch.lastPageId = cursor.lastPageId;
-      if (cursor.answeredQuestionIds !== undefined)
-        patch.answeredQuestionIds = cursor.answeredQuestionIds;
-    }
-
-    await db.filloutSessions.update(sessionId, patch);
+    await this.mutateSession(sessionId, async (session) => {
+      const currentMeta = (await this.decryptMeta(sessionId, session.metadata)) ?? {};
+      const patch: Partial<FilloutSession> = {
+        metadata: await this.encryptMeta(sessionId, { ...currentMeta, progress }),
+      };
+      if (cursor) {
+        if (cursor.lastItemIndex !== undefined) patch.lastItemIndex = cursor.lastItemIndex;
+        if (cursor.lastPageId !== undefined) patch.lastPageId = cursor.lastPageId;
+        if (cursor.answeredQuestionIds !== undefined)
+          patch.answeredQuestionIds = cursor.answeredQuestionIds;
+      }
+      return patch;
+    });
   }
 
   /**
@@ -180,14 +203,7 @@ export class OfflineSessionService {
    */
   static async updateResumeState(sessionId: string, resumeState: ResumeState): Promise<void> {
     resumeState = storageSnapshot(resumeState);
-    const session = await db.filloutSessions.get(sessionId);
-    if (!session) return;
-
-    await db.filloutSessions.update(sessionId, {
-      resumeState,
-      updatedAt: Date.now(),
-      synced: 0,
-    });
+    await this.mutateSession(sessionId, async () => ({ resumeState }));
   }
 
   /**
@@ -205,14 +221,7 @@ export class OfflineSessionService {
    * does not silently resume the abandoned position. No-op when the row is absent.
    */
   static async clearResumeState(sessionId: string): Promise<void> {
-    const session = await db.filloutSessions.get(sessionId);
-    if (!session) return;
-
-    await db.filloutSessions.update(sessionId, {
-      resumeState: undefined,
-      updatedAt: Date.now(),
-      synced: 0,
-    });
+    await this.mutateSession(sessionId, async () => ({ resumeState: undefined }));
   }
 
   /**
@@ -223,18 +232,14 @@ export class OfflineSessionService {
    * patch values are dropped so they don't clobber existing keys.
    */
   static async mergeMetadata(sessionId: string, patch: Record<string, unknown>): Promise<void> {
-    const s = await db.filloutSessions.get(sessionId);
-    if (!s) return;
-
     const cleaned: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(patch)) {
       if (v !== undefined) cleaned[k] = v;
     }
 
-    const currentMeta = (await this.decryptMeta(sessionId, s.metadata)) ?? {};
-    await db.filloutSessions.update(sessionId, {
-      metadata: await this.encryptMeta(sessionId, { ...currentMeta, ...cleaned }),
-      synced: 0,
+    await this.mutateSession(sessionId, async (session) => {
+      const currentMeta = (await this.decryptMeta(sessionId, session.metadata)) ?? {};
+      return { metadata: await this.encryptMeta(sessionId, { ...currentMeta, ...cleaned }) };
     });
   }
 
@@ -242,21 +247,19 @@ export class OfflineSessionService {
    * Mark session as completed.
    */
   static async completeSession(sessionId: string): Promise<void> {
-    await db.filloutSessions.update(sessionId, {
+    await this.mutateSession(sessionId, async () => ({
       status: 'completed',
       completedAt: Date.now(),
-      synced: 0,
-    });
+    }));
   }
 
   /**
    * Mark session as abandoned.
    */
   static async abandonSession(sessionId: string): Promise<void> {
-    await db.filloutSessions.update(sessionId, {
+    await this.mutateSession(sessionId, async () => ({
       status: 'abandoned',
-      synced: 0,
-    });
+    }));
   }
 
   /**
@@ -277,8 +280,17 @@ export class OfflineSessionService {
   /**
    * Mark session as synced.
    */
-  static async markSynced(sessionId: string): Promise<void> {
-    await db.filloutSessions.update(sessionId, { synced: 1 });
+  static async markSynced(sessionId: string, expectedRevision: number): Promise<boolean> {
+    let acknowledged = false;
+    await db.filloutSessions
+      .where('id')
+      .equals(sessionId)
+      .modify((session) => {
+        if ((session.syncRevision ?? 0) !== expectedRevision) return;
+        session.synced = 1;
+        acknowledged = true;
+      });
+    return acknowledged;
   }
 
   /**

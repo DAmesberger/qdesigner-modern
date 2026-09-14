@@ -305,7 +305,7 @@ export class QuestionnaireRuntime {
     this.config = config;
 
     this.session = {
-      id: nanoid(),
+      id: config.sessionId || nanoid(),
       questionnaireId: config.questionnaire.id,
       questionnaireVersion: config.questionnaire.version,
       participantId: config.participantId,

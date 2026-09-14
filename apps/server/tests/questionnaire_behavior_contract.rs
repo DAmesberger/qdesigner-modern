@@ -257,6 +257,53 @@ async fn exporting_external_cohort_configuration_uses_a_portable_named_binding()
 }
 
 #[tokio::test]
+async fn exporting_conflicting_local_bindings_cannot_silently_change_their_targets() {
+    for reserved_self in [false, true] {
+        let project_id = Uuid::new_v4();
+        let questionnaire_id = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        let binding = if reserved_self { "self" } else { "baseline" };
+        let questions = json!([
+            {"id":"first","type":"statistical-feedback","config":{"sourceMode":"cohort","dataSource":{"questionnaireBinding":binding,"questionnaireId":target,"source":"response","key":"score"}}},
+            {"id":"second","type":"statistical-feedback","config":{"sourceMode":"cohort","dataSource":{"questionnaireBinding":binding,"questionnaireId":Uuid::new_v4(),"source":"response","key":"score"}}}
+        ]);
+        let stored = StoredQuestionnaire {
+            name: "Conflicting bindings".into(),
+            description: None,
+            revision: 1,
+            version_major: 1,
+            version_minor: 0,
+            version_patch: 0,
+            content: json!({"questions":questions,"pages":[{"id":"p","blocks":[{"id":"b","type":"standard","questions":["first","second"]}]}],"variables":[],"flow":[]}),
+            settings: json!({"allowBackNavigation":false,"showProgressBar":true}),
+        };
+        let result = QuestionnaireDefinition::new(FakeAccess {
+            stored: Some(stored),
+            ..Default::default()
+        })
+        .read(qdesigner_server::questionnaire_definition::ReadInput {
+            project_id,
+            questionnaire_id,
+        })
+        .await;
+        let error =
+            result.expect_err("Ambiguous local mappings must not collapse to one portable source");
+        let qdesigner_server::questionnaire_definition::DefinitionReadFailure::Invalid(error) =
+            error
+        else {
+            panic!("Expected definition diagnostics");
+        };
+        assert!(
+            error
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_SOURCE_BINDING_CONFLICT"),
+            "{error:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn loop_and_adaptive_output_names_are_declarations_not_missing_references() {
     let mut input = fixture();
     input["structure"]["pages"][0]["blocks"][3]["loop"]["variable"] = json!("legacy-roster-name");
@@ -273,17 +320,171 @@ async fn loop_and_adaptive_output_names_are_declarations_not_missing_references(
 }
 
 #[tokio::test]
+async fn scoring_references_cannot_count_the_same_item_twice() {
+    for field in ["itemIds", "reverseScoredItemIds"] {
+        let mut input = fixture();
+        input["settings"]["scoring"]["scales"][0][field] = json!(["score", "score"]);
+        let result = inspect(input).await;
+        assert!(!result.valid, "Repeated {field} changes score weighting");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_DUPLICATE_REFERENCE"
+                    && d.path == format!("/settings/scoring/scales/0/{field}/1")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[tokio::test]
+async fn report_text_and_completion_metadata_do_not_require_a_variable_binding() {
+    let mut input = fixture();
+    for kind in ["interpretive-text", "completion-meta"] {
+        input["settings"]["report"]["widgets"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "id":kind,"type":kind,"position":{"x":0,"y":2,"w":6,"h":2},
+                "binding":{"source":"variable","key":""},"text":"Participant report"
+            }));
+    }
+    let result = inspect(input.clone()).await;
+    assert!(result.valid, "{:?}", result.diagnostics);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(result.canonical.as_ref().unwrap()).unwrap(),
+        input
+    );
+}
+
+#[tokio::test]
 async fn direct_page_references_remain_ordered_and_normalize_without_a_synthetic_block() {
     let mut input = fixture();
-    input["structure"]["pages"][1] = json!({"id":"end","questionIds":["followup","score"]});
+    input["questions"]["direct-only"] = json!({"type":"text-input"});
+    input["structure"]["pages"][1] =
+        json!({"id":"end","questionIds":["followup","score","direct-only"]});
     let first = inspect(input).await;
     assert!(first.valid, "{:?}", first.diagnostics);
+    assert!(!first
+        .diagnostics
+        .iter()
+        .any(|d| d.code == "QDEF_QUESTION_UNREFERENCED"));
     let canonical: serde_json::Value =
         serde_json::from_str(first.canonical.as_ref().unwrap()).unwrap();
     assert_eq!(
         canonical["structure"]["pages"][1]["questionIds"],
-        json!(["followup", "score"])
+        json!(["followup", "score", "direct-only"])
     );
     assert_eq!(canonical["structure"]["pages"][1]["blocks"], json!([]));
     assert_eq!(inspect(canonical).await.canonical, first.canonical);
+}
+
+#[tokio::test]
+async fn forced_flow_cycles_are_diagnosed_without_rejecting_bounded_or_conditional_exits() {
+    let mut input = fixture();
+    input["flow"] =
+        json!([{"id":"back","type":"skip","source":"end","target":"start","condition":"true"}]);
+    let result = inspect(input.clone()).await;
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_FLOW_CYCLE" && d.path == "/flow/0/target"),
+        "{:?}",
+        result.diagnostics
+    );
+    input["flow"][0]["type"] = json!("loop");
+    input["flow"][0]["iterations"] = json!(2);
+    let bounded = inspect(input.clone()).await;
+    assert!(bounded.valid, "{:?}", bounded.diagnostics);
+    input["flow"] = json!([
+        {"id":"exit","type":"terminate","source":"end","condition":"age < 18","priority":10},
+        {"id":"back","type":"skip","source":"end","target":"start","condition":"true"}
+    ]);
+    let conditional = inspect(input.clone()).await;
+    assert!(conditional.valid, "{:?}", conditional.diagnostics);
+    input["flow"][0]["condition"] = json!("false");
+    let forced = inspect(input).await;
+    assert!(
+        forced
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_FLOW_CYCLE" && d.path == "/flow/1/target"),
+        "{:?}",
+        forced.diagnostics
+    );
+}
+
+#[tokio::test]
+async fn direct_references_randomization_and_unplaced_flow_targets_are_validated() {
+    for (path, value, expected) in [
+        (
+            "/structure/pages/1/questionIds",
+            json!(["score", "score"]),
+            "/structure/pages/1/questionIds/1",
+        ),
+        (
+            "/structure/pages/0/blocks/1/randomization/fixedPositions",
+            json!({"missing":0}),
+            "/structure/pages/0/blocks/1/randomization/fixedPositions/missing",
+        ),
+        (
+            "/structure/pages/0/blocks/1/randomization/fixedPositions",
+            json!({"score":0,"followup":0}),
+            "/structure/pages/0/blocks/1/randomization/fixedPositions/score",
+        ),
+        (
+            "/structure/pages/0/blocks/1/randomization/fixedPositions",
+            json!({"score":1.5}),
+            "/structure/pages/0/blocks/1/randomization/fixedPositions/score",
+        ),
+    ] {
+        let mut input = fixture();
+        let (parent, key) = path.rsplit_once('/').unwrap();
+        input.pointer_mut(parent).unwrap()[key] = value;
+        let result = inspect(input).await;
+        assert!(!result.valid, "Accepted invalid {path}");
+        assert!(
+            result.diagnostics.iter().any(|d| d.path == expected),
+            "{expected}: {:?}",
+            result.diagnostics
+        );
+    }
+    let mut input = fixture();
+    input["questions"]["orphan"] =
+        json!({"type":"text-display","required":false,"display":{"content":"Unused"}});
+    input["flow"][0]["target"] = json!("orphan");
+    let result = inspect(input).await;
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_REFERENCE_NOT_FOUND" && d.path == "/flow/0/target"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[tokio::test]
+async fn participant_redirects_cannot_execute_javascript() {
+    for path in [
+        "/settings/distribution/completionRedirectUrl",
+        "/settings/fraudPrevention/fraudRedirectUrl",
+        "/flow/1/screenOutRedirectUrl",
+        "/settings/screeners/0/rules/0/screenOutRedirectUrl",
+        "/settings/quotas/0/quotas/0/overQuotaRedirectUrl",
+    ] {
+        let mut input = fixture();
+        *input.pointer_mut(path).unwrap() = json!("java\tscript:alert(document.cookie)");
+        let result = inspect(input).await;
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "UNSAFE_EXECUTABLE" && d.path == path),
+            "{path}: {:?}",
+            result.diagnostics
+        );
+    }
 }

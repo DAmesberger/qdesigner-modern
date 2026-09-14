@@ -667,51 +667,21 @@ pub(crate) fn normalize_variable_value(
     explicit_source: Option<&str>,
     definition: Option<&VariableDefinitionMetadata>,
 ) -> NormalizedVariableValue {
-    let payload = value.unwrap_or(Value::Null);
-    let mut raw_value = payload.clone();
-    let mut payload_value_type = explicit_value_type
+    // variable_value is the data itself. Protocol metadata has separate request
+    // fields; inspecting object keys here destroys score objects and user data.
+    let raw_value = value.unwrap_or(Value::Null);
+    let payload_value_type = explicit_value_type
         .map(str::trim)
-        .filter(|raw| !raw.is_empty())
-        .map(ToOwned::to_owned);
-    let mut payload_source = explicit_source
-        .map(str::trim)
-        .filter(|raw| !raw.is_empty())
-        .map(ToOwned::to_owned);
-
-    if let Value::Object(object) = &payload {
-        if let Some(inner_value) = object.get("value") {
-            raw_value = inner_value.clone();
-        }
-
-        if payload_value_type.is_none() {
-            payload_value_type = object
-                .get("valueType")
-                .or_else(|| object.get("type"))
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|raw| !raw.is_empty())
-                .map(ToOwned::to_owned);
-        }
-
-        if payload_source.is_none() {
-            payload_source = object
-                .get("source")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|raw| !raw.is_empty())
-                .map(ToOwned::to_owned);
-        }
-    }
+        .filter(|raw| !raw.is_empty());
+    let payload_source = explicit_source.map(str::trim).filter(|raw| !raw.is_empty());
 
     let value_type = normalize_index_value_type(
-        payload_value_type.as_deref(),
+        payload_value_type,
         definition.map(|item| item.declared_type.as_str()),
         &raw_value,
     );
     let source_kind = normalize_variable_source_kind(
-        payload_source
-            .as_deref()
-            .or_else(|| definition.map(|item| item.source_kind.as_str())),
+        payload_source.or_else(|| definition.map(|item| item.source_kind.as_str())),
     );
 
     let numeric_value = if value_type == "number" {

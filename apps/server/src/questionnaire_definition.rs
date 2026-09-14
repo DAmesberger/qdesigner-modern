@@ -4,6 +4,7 @@
 //! maintaining their own serializers or validators.
 
 mod behavior;
+mod behavior_flow;
 mod behavior_references;
 mod catalogue;
 mod diff;
@@ -826,7 +827,8 @@ fn document_from_stored(
     stored: StoredQuestionnaire,
     questionnaire_id: Option<Uuid>,
 ) -> Result<QDefDocument, Vec<DefinitionDiagnostic>> {
-    let mut diagnostics = Vec::new();
+    let mut diagnostics =
+        source_bindings::local_mapping_diagnostics(&stored.content, questionnaire_id);
     safety::inspect(&stored.content, "/content", &mut diagnostics);
     safety::inspect(&stored.settings, "/settings", &mut diagnostics);
     let content = match stored.content.as_object() {
@@ -1349,6 +1351,14 @@ fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
     }
 
     for (page_index, page) in document.structure.pages.iter().enumerate() {
+        if let Some(references) = page.behavior.get("questionIds").and_then(Value::as_array) {
+            referenced_questions.extend(
+                references
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned),
+            );
+        }
         if page.id.trim().is_empty() || !page_ids.insert(page.id.clone()) {
             diagnostics.push(error(
                 "QDEF_DUPLICATE_ID",
@@ -1411,8 +1421,12 @@ fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
                 code: "QDEF_QUESTION_UNREFERENCED".into(),
                 severity: DiagnosticSeverity::Warning,
                 path: format!("/questions/{}", pointer_segment(question_id)),
-                message: format!("Question '{question_id}' is not referenced by any block."),
-                hint: Some("Add its stable id to an ordered block questionIds list.".into()),
+                message: format!(
+                    "Question '{question_id}' is not referenced by any page or block."
+                ),
+                hint: Some(
+                    "Add its stable id to an ordered page or block questionIds list.".into(),
+                ),
                 related_paths: Vec::new(),
             });
         }

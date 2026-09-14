@@ -51,7 +51,9 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
     };
     let pages = array(&value["structure"]["pages"]);
     let page_ids: BTreeSet<_> = pages.iter().map(|p| text(&p["id"])).collect();
-    let resolve_position = |id: &str| page_ids.contains(id) || questions.contains_key(id);
+    let positions = super::behavior_flow::position_index(pages);
+    let resolve_position = |id: &str| positions.contains_key(id);
+    super::behavior_flow::validate(value, out);
     let mut names = BTreeMap::new();
     for (id, var) in variables {
         let name = var["name"].as_str().unwrap_or(id);
@@ -166,7 +168,16 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
     }
     cycles(&dependencies, out);
     for (pi, page) in pages.iter().enumerate() {
+        let mut page_references = BTreeSet::new();
         for (qi, id) in array(&page["questionIds"]).iter().enumerate() {
+            if !page_references.insert(text(id)) {
+                issue(
+                    out,
+                    "QDEF_DUPLICATE_REFERENCE",
+                    format!("/structure/pages/{pi}/questionIds/{qi}"),
+                    "A direct page reference must occur at most once.",
+                );
+            }
             reference(
                 out,
                 format!("/structure/pages/{pi}/questionIds/{qi}"),
@@ -177,6 +188,34 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
         for (bi, block) in array(&page["blocks"]).iter().enumerate() {
             let path = format!("/structure/pages/{pi}/blocks/{bi}");
             let ids: BTreeSet<_> = array(&block["questionIds"]).iter().map(text).collect();
+            if let Some(positions) = block["randomization"]["fixedPositions"].as_object() {
+                let mut used = BTreeSet::new();
+                for (id, position) in positions {
+                    let at = format!(
+                        "{path}/randomization/fixedPositions/{}",
+                        pointer_segment(id)
+                    );
+                    reference(out, &at, id, ids.contains(id.as_str()));
+                    if let Some(index) = position.as_u64().filter(|index| *index < ids.len() as u64)
+                    {
+                        if !used.insert(index) {
+                            issue(
+                                out,
+                                "QDEF_DUPLICATE_POSITION",
+                                at,
+                                "Two questions cannot occupy the same fixed position.",
+                            );
+                        }
+                    } else {
+                        issue(
+                            out,
+                            "QDEF_BEHAVIOR_INVALID",
+                            at,
+                            "A fixed position must be an integer index within this block.",
+                        );
+                    }
+                }
+            }
             if let Some(loop_config) = block.get("loop") {
                 if let Some(id) = loop_config["source"]["questionId"].as_str() {
                     reference(
@@ -236,7 +275,10 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
     unique(array(&value["flow"]), "id", "/flow", out);
     for (index, rule) in array(&value["flow"]).iter().enumerate() {
         for field in ["source", "target"] {
-            if let Some(id) = rule[field].as_str() {
+            if let Some(id) = rule[field]
+                .as_str()
+                .filter(|id| field != "source" || !id.is_empty())
+            {
                 reference(
                     out,
                     format!("/flow/{index}/{field}"),
@@ -273,6 +315,19 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
     let scale_ids: BTreeSet<_> = scales.iter().map(|s| text(&s["id"])).collect();
     for (index, scale) in scales.iter().enumerate() {
         let path = format!("/settings/scoring/scales/{index}");
+        for field in ["itemIds", "reverseScoredItemIds"] {
+            let mut seen = BTreeSet::new();
+            for (item_index, id) in array(&scale[field]).iter().enumerate() {
+                if !seen.insert(text(id)) {
+                    issue(
+                        out,
+                        "QDEF_DUPLICATE_REFERENCE",
+                        format!("{path}/{field}/{item_index}"),
+                        "A scoring item must occur at most once in this list.",
+                    );
+                }
+            }
+        }
         let ids: BTreeSet<_> = array(&scale["itemIds"]).iter().map(text).collect();
         for (i, id) in array(&scale["itemIds"]).iter().enumerate() {
             reference(
@@ -311,6 +366,9 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
     );
     for (index, widget) in array(&settings["report"]["widgets"]).iter().enumerate() {
         let path = format!("/settings/report/widgets/{index}");
+        if ["interpretive-text", "completion-meta"].contains(&text(&widget["type"])) {
+            continue;
+        }
         let key = text(&widget["binding"]["key"]);
         let valid = if text(&widget["type"]) == "reaction-cohort-box" {
             questions.contains_key(key)

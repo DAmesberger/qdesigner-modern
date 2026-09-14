@@ -81,7 +81,7 @@ pub(super) fn inspect_portable(value: &Value, diagnostics: &mut Vec<DefinitionDi
 }
 
 pub(super) fn execution_diagnostics(content: &Value) -> Vec<DefinitionDiagnostic> {
-    let mut diagnostics = Vec::new();
+    let mut diagnostics = local_mapping_diagnostics(content, None);
     let questions: Vec<(String, &Value)> = match &content["questions"] {
         Value::Array(items) => items
             .iter()
@@ -104,13 +104,66 @@ pub(super) fn execution_diagnostics(content: &Value) -> Vec<DefinitionDiagnostic
                     continue;
                 }
                 if let Some(name) = source.get(binding).and_then(Value::as_str) {
-                    if !source
+                    if source
                         .get(field)
                         .and_then(Value::as_str)
-                        .is_some_and(|target| !target.trim().is_empty())
+                        .is_none_or(|target| target.trim().is_empty())
                     {
                         diagnostics.push(error("QDEF_SOURCE_BINDING_REQUIRED",format!("/questions/{id}{location}/{binding}"),format!("Source binding '{name}' has no local target."),Some("Choose an authorized local source in the feedback designer before publishing or running this questionnaire.")));
                     }
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+/// A portable binding is one logical source. Reject ambiguous local aliases
+/// before export or replacement can erase the distinction between their targets.
+pub(super) fn local_mapping_diagnostics(
+    content: &Value,
+    questionnaire_id: Option<uuid::Uuid>,
+) -> Vec<DefinitionDiagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut targets = std::collections::BTreeMap::new();
+    for (index, question) in content["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        if question["type"] != "statistical-feedback" {
+            continue;
+        }
+        for location in ["/config/dataSource", "/display/dataSource", "/dataSource"] {
+            let Some(source) = question.pointer(location).and_then(Value::as_object) else {
+                continue;
+            };
+            for (field, binding) in FIELDS {
+                let (Some(name), Some(target)) = (
+                    source.get(binding).and_then(Value::as_str),
+                    source
+                        .get(field)
+                        .and_then(Value::as_str)
+                        .filter(|target| !target.is_empty()),
+                ) else {
+                    continue;
+                };
+                let path = format!("/content/questions/{index}{location}/{binding}");
+                let invalid_self = field == "questionnaireId"
+                    && name == "self"
+                    && questionnaire_id.is_some_and(|id| target != id.to_string());
+                let previous = targets.insert((field, name), (target, path.clone()));
+                if invalid_self || previous.as_ref().is_some_and(|(prior, _)| *prior != target) {
+                    let mut diagnostic = error(
+                        "QDEF_SOURCE_BINDING_CONFLICT", path,
+                        format!("Source binding '{name}' does not identify one consistent local target."),
+                        Some("Use a distinct binding name for each source; reserve 'self' for this questionnaire."),
+                    );
+                    if let Some((_, previous_path)) = previous {
+                        diagnostic.related_paths.push(previous_path);
+                    }
+                    diagnostics.push(diagnostic);
                 }
             }
         }

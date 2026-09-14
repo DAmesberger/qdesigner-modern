@@ -99,6 +99,8 @@ export function filloutDefinitionKey(
 }
 
 export interface FilloutSession {
+  /** Version of the local session snapshot acknowledged by the upload service. */
+  syncRevision?: number;
   id: string; // client-generated UUID
   questionnaireId: string;
   status: 'active' | 'completed' | 'abandoned';
