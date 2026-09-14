@@ -10,11 +10,11 @@ mod catalogue;
 mod diff;
 mod edits;
 mod formula_references;
-mod variable_catalogue;
 mod persistence;
 mod projections;
 mod safety;
 mod source_bindings;
+mod variable_catalogue;
 
 pub use diff::{SemanticChange, SemanticChangeKind, SemanticDiff};
 pub use edits::StableDefinitionEdit;
