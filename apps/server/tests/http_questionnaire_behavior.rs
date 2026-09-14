@@ -4,6 +4,46 @@ use serde_json::{json, Value};
 mod common;
 use common::{build_test_state, json_request, provision_tenant, register_user, test_app};
 
+#[path = "fixtures/behavior_cases.rs"]
+mod behavior_cases;
+
+#[tokio::test]
+async fn self_binding_cannot_publish_with_another_authorized_questionnaire_as_its_target() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let collection = format!("/api/projects/{}/questionnaires", tenant.project_id);
+    let (status, created) = json_request(&app, "POST", &collection, Some(&owner.token), Some(&json!({
+        "name":"Misbound self draft", "content":{"pages":[],"variables":[],"flow":[],"questions":[{
+            "id":"feedback", "type":"statistical-feedback", "config":{"sourceMode":"cohort","dataSource":{
+                "questionnaireBinding":"self", "questionnaireId":tenant.questionnaire_id, "source":"response", "key":"score"
+            }}
+        }]}
+    }))).await;
+    assert_eq!(status, StatusCode::CREATED, "{created:?}");
+    let uri = format!("{collection}/{}", created["id"].as_str().unwrap());
+    let (status, rejected) = json_request(
+        &app,
+        "POST",
+        &format!("{uri}/publish"),
+        Some(&owner.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{rejected:?}");
+    assert!(
+        rejected
+            .to_string()
+            .contains("QDEF_SOURCE_BINDING_CONFLICT"),
+        "{rejected:?}"
+    );
+    let (_, after) = json_request(&app, "GET", &uri, Some(&owner.token), None).await;
+    assert_eq!(created, after);
+}
+
 #[tokio::test]
 async fn behavioral_import_projects_variables_and_reexports_without_semantic_drift() {
     let Some(state) = build_test_state().await else {
@@ -13,51 +53,52 @@ async fn behavioral_import_projects_variables_and_reexports_without_semantic_dri
     let app = test_app(state);
     let owner = register_user(&app).await;
     let tenant = provision_tenant(&app, &owner.token).await;
-    let document: Value =
-        serde_json::from_str(include_str!("fixtures/qdef-behavior.json")).unwrap();
-    let uri = format!(
-        "/api/projects/{}/questionnaire-definitions/apply",
-        tenant.project_id
-    );
-    let (status, imported) = json_request(
+    for (case_index, (name, document)) in behavior_cases::cases().into_iter().enumerate() {
+        let uri = format!(
+            "/api/projects/{}/questionnaire-definitions/apply",
+            tenant.project_id
+        );
+        let (status, imported) = json_request(
         &app,
         "POST",
         &uri,
         Some(&owner.token),
         Some(&json!({
-            "definition": document.to_string(), "commit": true, "idempotencyKey": "behavior-import"
+            "definition": document.to_string(), "commit": true, "idempotencyKey": format!("behavior-import-{case_index}")
         })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{imported:?}");
-    let id = imported["questionnaireId"].as_str().unwrap();
-    let (status, exported) = json_request(
-        &app,
-        "GET",
-        &format!(
-            "/api/projects/{}/questionnaires/{id}/definition",
-            tenant.project_id
-        ),
-        Some(&owner.token),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{exported:?}");
-    assert_eq!(exported["canonical"], imported["canonical"]);
-    assert_eq!(exported["digest"], imported["digest"]);
-    let canonical: Value = serde_json::from_str(exported["canonical"].as_str().unwrap()).unwrap();
-    assert_eq!(canonical, document);
-    let count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM questionnaire_variable_definitions WHERE questionnaire_id = $1",
-    )
-    .bind(uuid::Uuid::parse_str(id).unwrap())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        count,
-        document["variables"].as_object().unwrap().len() as i64
-    );
+        assert_eq!(status, StatusCode::OK, "{name}: {imported:?}");
+        let id = imported["questionnaireId"].as_str().unwrap();
+        let (status, exported) = json_request(
+            &app,
+            "GET",
+            &format!(
+                "/api/projects/{}/questionnaires/{id}/definition",
+                tenant.project_id
+            ),
+            Some(&owner.token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{exported:?}");
+        assert_eq!(exported["canonical"], imported["canonical"]);
+        assert_eq!(exported["digest"], imported["digest"]);
+        let canonical: Value =
+            serde_json::from_str(exported["canonical"].as_str().unwrap()).unwrap();
+        assert_eq!(canonical, document);
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM questionnaire_variable_definitions WHERE questionnaire_id = $1",
+        )
+        .bind(uuid::Uuid::parse_str(id).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            count,
+            document["variables"].as_object().unwrap().len() as i64
+        );
+    }
 }
 
 #[tokio::test]

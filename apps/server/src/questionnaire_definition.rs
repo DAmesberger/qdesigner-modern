@@ -9,6 +9,7 @@ mod behavior_references;
 mod catalogue;
 mod diff;
 mod edits;
+mod formula_references;
 mod persistence;
 mod projections;
 mod safety;
@@ -1588,7 +1589,7 @@ fn diagnose_unknown_keys(
             diagnostics.push(error(
                 "QDEF_STORED_CAPABILITY_UNSUPPORTED",
                 format!("{base_path}/{}", pointer_segment(key)),
-                format!("Stored field '{key}' is outside the minimal text-only QDef shape."),
+                format!("Stored field '{key}' has no supported portable QDef representation."),
                 Some("Wait for the corresponding QDef capability ticket; the field was not discarded."),
             ));
         }
@@ -1630,6 +1631,12 @@ pub(crate) async fn require_stored_execution_capabilities(
     .fetch_optional(connection)
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+    let diagnostics = source_bindings::local_mapping_diagnostics(&content, Some(questionnaire_id));
+    if has_errors(&diagnostics) {
+        return Err(ApiError::Validation(
+            serde_json::to_string(&diagnostics).map_err(|e| ApiError::Internal(e.to_string()))?,
+        ));
+    }
     require_execution_capabilities(&content)
 }
 

@@ -1,0 +1,65 @@
+[
+  {
+    "name": "answer loop source",
+    "fields": {
+      "/structure/pages/0/blocks/3/loop/source": { "type": "answer", "questionId": "score" }
+    }
+  },
+  {
+    "name": "variable loop source",
+    "fields": {
+      "/variables/items": {
+        "name": "items",
+        "type": "array",
+        "scope": "global",
+        "defaultValue": ["one", "two"]
+      },
+      "/structure/pages/0/blocks/3/loop/source": { "type": "variable", "variableId": "items" }
+    }
+  },
+  {
+    "name": "bounded flow and direct page placement",
+    "fields": {
+      "/structure/pages/1/questionIds": ["followup"],
+      "/flow/0": {
+        "id": "bounded",
+        "type": "loop",
+        "source": "end",
+        "target": "start",
+        "condition": "true",
+        "iterations": 2
+      }
+    }
+  },
+  {
+    "name": "scientific and distribution options",
+    "fields": {
+      "/structure/pages/0/blocks/4/adaptive/scoring/0/correctValue": 5,
+      "/settings/webgl": { "targetFPS": 120, "antialias": true, "pixelRatio": 2 },
+      "/settings/distribution/panelIntegration/prolificStudyId": "authored-prolific-study",
+      "/settings/distribution/panelIntegration/mturkHitId": "authored-mturk-hit",
+      "/settings/distribution/panelIntegration/sonaStudyId": "authored-sona-study",
+      "/settings/scoring/scales/0/norm/normTableId": "gad7-general-population"
+    }
+  },
+  {
+    "name": "report widgets without data bindings",
+    "fields": {
+      "/settings/report/widgets": [
+        {
+          "id": "prose",
+          "type": "interpretive-text",
+          "position": { "x": 0, "y": 0, "w": 12, "h": 2 },
+          "binding": { "source": "variable", "key": "" },
+          "text": "Thank you for participating."
+        },
+        {
+          "id": "completion",
+          "type": "completion-meta",
+          "position": { "x": 0, "y": 2, "w": 12, "h": 2 },
+          "binding": { "source": "variable", "key": "" }
+        }
+      ]
+    }
+  }
+]

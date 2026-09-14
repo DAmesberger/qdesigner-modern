@@ -6,6 +6,23 @@ use qdesigner_server::questionnaire_definition::{
 use serde_json::json;
 use uuid::Uuid;
 
+#[path = "fixtures/behavior_cases.rs"]
+mod behavior_cases;
+
+#[tokio::test]
+async fn behavioral_variants_normalize_idempotently_without_losing_fields() {
+    for (name, document) in behavior_cases::cases() {
+        let first = inspect(document.clone()).await;
+        assert!(first.valid, "{name}: {:?}", first.diagnostics);
+        let canonical: serde_json::Value =
+            serde_json::from_str(first.canonical.as_ref().unwrap()).unwrap();
+        assert_eq!(canonical, document, "{name}");
+        let second = inspect(canonical).await;
+        assert_eq!(first.canonical, second.canonical, "{name}");
+        assert_eq!(first.digest, second.digest, "{name}");
+    }
+}
+
 #[derive(Default)]
 struct FakeAccess {
     stored: Option<StoredQuestionnaire>,
@@ -145,6 +162,127 @@ async fn broken_behavioral_references_and_types_have_stable_paths() {
         "{:?}",
         result.diagnostics
     );
+}
+
+#[tokio::test]
+async fn formula_dependencies_cannot_hide_cycles_by_omitting_dependency_metadata() {
+    for (left, right) in [("b + 1", "a + 1"), ("right + 1", "left + 1")] {
+        let mut input = fixture();
+        input["variables"]["a"] =
+            json!({"name":"left", "type":"number", "scope":"global", "formula":left});
+        input["variables"]["b"] =
+            json!({"name":"right", "type":"number", "scope":"global", "formula":right});
+        let result = inspect(input).await;
+        assert!(!result.valid, "Formula cycle was accepted");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_DEPENDENCY_CYCLE" && d.path.ends_with("/formula")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[tokio::test]
+async fn formula_literals_properties_and_function_names_do_not_create_dependencies() {
+    for formula in ["CONCAT('b', \"b\")", "cohort.b + 1", "b(1)", "1e3", "1 # b"] {
+        let mut input = fixture();
+        input["variables"]["a"] =
+            json!({"name":"a", "type":"number", "scope":"global", "formula":formula});
+        input["variables"]["b"] =
+            json!({"name":"b", "type":"number", "scope":"global", "formula":"a + 1"});
+        input["variables"]["e3"] =
+            json!({"name":"e3", "type":"number", "scope":"global", "formula":"a + 1"});
+        let result = inspect(input).await;
+        assert!(result.valid, "{formula}: {:?}", result.diagnostics);
+    }
+}
+
+#[tokio::test]
+async fn formula_constants_and_operators_do_not_read_same_named_variables() {
+    for token in ["true", "false", "null", "undefined", "NaN", "Infinity"] {
+        let mut input = fixture();
+        input["variables"][token] =
+            json!({"name":token,"type":"boolean","scope":"global","formula":token});
+        let result = inspect(input).await;
+        assert!(result.valid, "{token}: {:?}", result.diagnostics);
+    }
+    let mut input = fixture();
+    input["variables"]["not"] =
+        json!({"name":"not","type":"boolean","scope":"global","formula":"not false"});
+    let result = inspect(input).await;
+    assert!(result.valid, "{:?}", result.diagnostics);
+}
+
+#[tokio::test]
+async fn formula_parser_variants_keep_symbolic_reads_distinct_from_declarations() {
+    let cases: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../packages/questionnaire-core/fixtures/formula-dependency-cases.json"
+    ))
+    .unwrap();
+    for case in cases.as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let formula = case["formula"].as_str().unwrap();
+        let cyclic = case["cyclic"].as_bool().unwrap();
+        let mut input = fixture();
+        input["variables"]["computed"] =
+            json!({"name":"computed","type":"number","scope":"global","formula":formula});
+        input["variables"][name] =
+            json!({"name":name,"type":"number","scope":"global","formula":"computed + 1"});
+        let result = inspect(input).await;
+        assert_eq!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_DEPENDENCY_CYCLE"),
+            cyclic,
+            "{formula}: {:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[tokio::test]
+async fn variable_aliases_cannot_shadow_another_registry_identity() {
+    let mut input = fixture();
+    input["variables"]["a"] =
+        json!({"name":"b","type":"number","scope":"global","formula":"b + 1"});
+    input["variables"]["b"] = json!({"name":"c","type":"number","scope":"global","defaultValue":1});
+    let result = inspect(input).await;
+    assert!(!result.valid);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "QDEF_DUPLICATE_ID" && d.path == "/variables/a/name"),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[tokio::test]
+async fn encoded_signed_urls_are_installation_credentials_even_inside_passive_markup() {
+    for content in [
+        "https://storage.example.org/asset?%58-Amz-Signature=secret",
+        "https://storage.example.org/asset?%73ig=secret",
+        "<a href=\"https://storage.example.org/asset?&#115;ig=secret\">Download</a>",
+    ] {
+        let mut input = fixture();
+        input["questionnaire"]["description"] = json!(content);
+        let result = inspect(input).await;
+        assert!(!result.valid, "Accepted {content}");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "QDEF_INSTALLATION_STATE"
+                    && d.path == "/questionnaire/description"),
+            "{:?}",
+            result.diagnostics
+        );
+    }
 }
 
 #[tokio::test]

@@ -126,14 +126,22 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                 inspect(child, &format!("{path}/{index}"), diagnostics);
             }
         }
-        Value::String(text) if signed_url(text) => diagnostics.push(error(
-            "QDEF_INSTALLATION_STATE",
-            path,
-            "Signed URLs contain installation credentials and cannot be transferred in QDef.",
-            Some("Use a portable asset reference or a public URL without signed credentials."),
-        )),
-        Value::String(text) if text.contains('<') && !passive_html(text) => {
-            reject(path, diagnostics)
+        Value::String(text) => {
+            let (passive, signed_markup) = if text.contains('<') {
+                inspect_html(text)
+            } else {
+                (true, false)
+            };
+            if signed_url(text) || signed_markup {
+                diagnostics.push(error(
+                    "QDEF_INSTALLATION_STATE", path,
+                    "Signed URLs contain installation credentials and cannot be transferred in QDef.",
+                    Some("Use a portable asset reference or a public URL without signed credentials."),
+                ));
+            }
+            if !passive {
+                reject(path, diagnostics);
+            }
         }
         _ => {}
     }
@@ -142,7 +150,26 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
 fn signed_url(text: &str) -> bool {
     // Also covers URLs embedded in participant markup. Query names are
     // case-insensitive here because cloud providers use several spellings.
-    let lower = text.to_ascii_lowercase();
+    // Query parameter names may be percent encoded. Decode once, as a URL
+    // query parser does; malformed escapes remain literal data.
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) = (
+                (bytes[index + 1] as char).to_digit(16),
+                (bytes[index + 2] as char).to_digit(16),
+            ) {
+                decoded.push((high * 16 + low) as u8);
+                index += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+    let lower = String::from_utf8_lossy(&decoded).to_ascii_lowercase();
     (lower.contains("https://") || lower.contains("http://"))
         && [
             "x-amz-signature=",
@@ -183,6 +210,7 @@ fn active_url(value: &str) -> bool {
 #[derive(Default)]
 struct PassiveHtml {
     rejected: Cell<bool>,
+    signed_url: Cell<bool>,
 }
 
 impl TokenSink for PassiveHtml {
@@ -190,6 +218,13 @@ impl TokenSink for PassiveHtml {
 
     fn process_token(&self, token: Token, _line_number: u64) -> TokenSinkResult<()> {
         if let Token::TagToken(tag) = token {
+            if tag
+                .attrs
+                .iter()
+                .any(|attribute| signed_url(&attribute.value))
+            {
+                self.signed_url.set(true);
+            }
             // Only passive text markup is part of this tracer. Foreign content,
             // script/style, documents, embeds and interactive controls need a
             // separate capability; do not guess their execution semantics.
@@ -271,7 +306,7 @@ impl TokenSink for PassiveHtml {
     }
 }
 
-fn passive_html(source: &str) -> bool {
+fn inspect_html(source: &str) -> (bool, bool) {
     // Parse HTML tokens instead of searching strings: entity-escaped URLs,
     // mixed-case names and malformed markup follow the browser tokenizer.
     let input = BufferQueue::default();
@@ -279,5 +314,8 @@ fn passive_html(source: &str) -> bool {
     let tokenizer = Tokenizer::new(PassiveHtml::default(), Default::default());
     let _ = tokenizer.feed(&input);
     tokenizer.end();
-    !tokenizer.sink.rejected.get()
+    (
+        !tokenizer.sink.rejected.get(),
+        tokenizer.sink.signed_url.get(),
+    )
 }

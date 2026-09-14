@@ -57,6 +57,16 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
     let mut names = BTreeMap::new();
     for (id, var) in variables {
         let name = var["name"].as_str().unwrap_or(id);
+        if name != id && variables.contains_key(name) {
+            issue(
+                out,
+                "QDEF_DUPLICATE_ID",
+                format!("/variables/{}/name", pointer_segment(id)),
+                format!(
+                    "Variable name '{name}' conflicts with another variable's registry identity."
+                ),
+            );
+        }
         if let Some(previous) = names.insert(name, id.as_str()) {
             issue(
                 out,
@@ -105,6 +115,21 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
                 .entry(id.clone())
                 .or_default()
                 .push((resolved.to_owned(), at));
+        }
+        if let Some(formula) = var["formula"].as_str() {
+            for symbol in super::formula_references::symbols(formula) {
+                let resolved = if variables.contains_key(&symbol) {
+                    Some(symbol.as_str())
+                } else {
+                    names.get(symbol.as_str()).copied()
+                };
+                if let Some(resolved) = resolved {
+                    dependencies
+                        .entry(id.clone())
+                        .or_default()
+                        .push((resolved.to_owned(), format!("{path}/formula")));
+                }
+            }
         }
         if let Some(server) = var.get("server") {
             let expected = if server.get("stat").is_some() {
@@ -442,18 +467,21 @@ pub(super) fn validate(value: &Value, out: &mut Vec<DefinitionDiagnostic>) {
 }
 
 fn cycles(edges: &BTreeMap<String, Vec<(String, String)>>, out: &mut Vec<DefinitionDiagnostic>) {
-    fn visit(
-        node: &str,
-        edges: &BTreeMap<String, Vec<(String, String)>>,
-        active: &mut BTreeSet<String>,
-        done: &mut BTreeSet<String>,
-        out: &mut Vec<DefinitionDiagnostic>,
-    ) {
+    let mut done = BTreeSet::new();
+    for node in edges.keys() {
         if done.contains(node) {
-            return;
+            continue;
         }
-        active.insert(node.to_owned());
-        for (next, path) in edges.get(node).into_iter().flatten() {
+        let mut active = BTreeSet::from([node]);
+        let mut stack = vec![(node, 0)];
+        while let Some((current, index)) = stack.last_mut() {
+            let Some((next, path)) = edges.get(*current).and_then(|items| items.get(*index)) else {
+                let (finished, _) = stack.pop().unwrap();
+                active.remove(finished);
+                done.insert(finished);
+                continue;
+            };
+            *index += 1;
             if active.contains(next) {
                 issue(
                     out,
@@ -461,15 +489,10 @@ fn cycles(edges: &BTreeMap<String, Vec<(String, String)>>, out: &mut Vec<Definit
                     path.clone(),
                     format!("Dependency on '{next}' closes a cycle."),
                 );
-            } else {
-                visit(next, edges, active, done, out);
+            } else if !done.contains(next) {
+                active.insert(next);
+                stack.push((next, 0));
             }
         }
-        active.remove(node);
-        done.insert(node.to_owned());
-    }
-    let mut done = BTreeSet::new();
-    for node in edges.keys() {
-        visit(node, edges, &mut BTreeSet::new(), &mut done, out);
     }
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { VariableEngine } from './VariableEngine';
 import type { Variable } from '@qdesigner/questionnaire-core';
+import dependencyCases from '@qdesigner/questionnaire-core/fixtures/formula-dependency-cases.json';
 
 describe('VariableEngine', () => {
   let engine: VariableEngine;
@@ -16,7 +17,7 @@ describe('VariableEngine', () => {
         name: 'age',
         type: 'number',
         scope: 'global',
-        defaultValue: 25
+        defaultValue: 25,
       };
 
       engine.registerVariable(variable);
@@ -28,7 +29,7 @@ describe('VariableEngine', () => {
         id: 'var1',
         name: 'score',
         type: 'number',
-        scope: 'global'
+        scope: 'global',
       };
 
       engine.registerVariable(variable);
@@ -41,7 +42,7 @@ describe('VariableEngine', () => {
         id: 'var1',
         name: 'count',
         type: 'number',
-        scope: 'global'
+        scope: 'global',
       };
 
       engine.registerVariable(variable);
@@ -50,6 +51,34 @@ describe('VariableEngine', () => {
   });
 
   describe('Formula evaluation', () => {
+    it.each(dependencyCases)(
+      'matches portable dependency semantics for $formula ($name)',
+      ({ name, formula, cyclic }) => {
+        engine.registerVariable({
+          id: 'computed',
+          name: 'computed',
+          type: 'number',
+          scope: 'global',
+          formula,
+        });
+        engine.registerVariable({
+          id: name,
+          name,
+          type: 'number',
+          scope: 'global',
+          formula: 'computed + 1',
+        });
+        let cycle = false;
+        try {
+          engine.getVariable('computed');
+        } catch (error) {
+          // These fixtures isolate dependency semantics: a nonnumeric formula can
+          // still fail result validation after its graph has been evaluated.
+          cycle = error instanceof Error && error.message.includes('Circular dependency');
+        }
+        expect(cycle).toBe(cyclic);
+      }
+    );
     it('should evaluate simple mathematical formulas', () => {
       const result = engine.evaluateFormula('2 + 2 * 3');
       expect(result.value).toBe(8);
@@ -62,7 +91,7 @@ describe('VariableEngine', () => {
         name: 'x',
         type: 'number',
         scope: 'global',
-        defaultValue: 10
+        defaultValue: 10,
       };
 
       const var2: Variable = {
@@ -70,7 +99,7 @@ describe('VariableEngine', () => {
         name: 'y',
         type: 'number',
         scope: 'global',
-        formula: 'x * 2 + 5'
+        formula: 'x * 2 + 5',
       };
 
       engine.registerVariable(var1);
@@ -85,7 +114,7 @@ describe('VariableEngine', () => {
         name: 'base',
         type: 'number',
         scope: 'global',
-        defaultValue: 10
+        defaultValue: 10,
       };
 
       const var2: Variable = {
@@ -93,7 +122,7 @@ describe('VariableEngine', () => {
         name: 'multiplied',
         type: 'number',
         scope: 'global',
-        formula: 'base * 3'
+        formula: 'base * 3',
       };
 
       const var3: Variable = {
@@ -101,7 +130,7 @@ describe('VariableEngine', () => {
         name: 'final',
         type: 'number',
         scope: 'global',
-        formula: 'multiplied + base'
+        formula: 'multiplied + base',
       };
 
       engine.registerVariable(var1);
@@ -122,7 +151,7 @@ describe('VariableEngine', () => {
         name: 'a',
         type: 'number',
         scope: 'global',
-        formula: 'b + 1'
+        formula: 'b + 1',
       };
 
       const var2: Variable = {
@@ -130,7 +159,7 @@ describe('VariableEngine', () => {
         name: 'b',
         type: 'number',
         scope: 'global',
-        formula: 'a + 1'
+        formula: 'a + 1',
       };
 
       engine.registerVariable(var1);
@@ -147,7 +176,7 @@ describe('VariableEngine', () => {
         name: 'score',
         type: 'number',
         scope: 'global',
-        defaultValue: 85
+        defaultValue: 85,
       };
 
       const var2: Variable = {
@@ -155,7 +184,7 @@ describe('VariableEngine', () => {
         name: 'grade',
         type: 'string',
         scope: 'global',
-        formula: 'IF(score >= 90, "A", IF(score >= 80, "B", "C"))'
+        formula: 'IF(score >= 90, "A", IF(score >= 80, "B", "C"))',
       };
 
       engine.registerVariable(var1);
@@ -170,7 +199,7 @@ describe('VariableEngine', () => {
         name: 'scores',
         type: 'array',
         scope: 'global',
-        defaultValue: [10, 20, 30, 40, 50]
+        defaultValue: [10, 20, 30, 40, 50],
       };
 
       const var2: Variable = {
@@ -178,7 +207,7 @@ describe('VariableEngine', () => {
         name: 'total',
         type: 'number',
         scope: 'global',
-        formula: 'SUM(scores)'
+        formula: 'SUM(scores)',
       };
 
       const var3: Variable = {
@@ -186,7 +215,7 @@ describe('VariableEngine', () => {
         name: 'average',
         type: 'number',
         scope: 'global',
-        formula: 'AVG(scores)'
+        formula: 'AVG(scores)',
       };
 
       engine.registerVariable(var1);
@@ -203,7 +232,7 @@ describe('VariableEngine', () => {
         name: 'firstName',
         type: 'string',
         scope: 'global',
-        defaultValue: 'John'
+        defaultValue: 'John',
       };
 
       const var2: Variable = {
@@ -211,7 +240,7 @@ describe('VariableEngine', () => {
         name: 'lastName',
         type: 'string',
         scope: 'global',
-        defaultValue: 'Doe'
+        defaultValue: 'Doe',
       };
 
       const var3: Variable = {
@@ -219,7 +248,7 @@ describe('VariableEngine', () => {
         name: 'fullName',
         type: 'string',
         scope: 'global',
-        formula: 'CONCAT(firstName, " ", lastName)'
+        formula: 'CONCAT(firstName, " ", lastName)',
       };
 
       engine.registerVariable(var1);
@@ -237,14 +266,14 @@ describe('VariableEngine', () => {
         name: 'counter',
         type: 'number',
         scope: 'global',
-        defaultValue: 0
+        defaultValue: 0,
       };
 
       engine.registerVariable(var1);
       engine.setVariable('var1', 42);
 
       const state = engine.exportState();
-      
+
       // Create new engine and import state
       const newEngine = new VariableEngine();
       newEngine.registerVariable(var1);
@@ -259,7 +288,7 @@ describe('VariableEngine', () => {
         name: 'x',
         type: 'number',
         scope: 'global',
-        defaultValue: 10
+        defaultValue: 10,
       };
 
       const var2: Variable = {
@@ -267,7 +296,7 @@ describe('VariableEngine', () => {
         name: 'y',
         type: 'number',
         scope: 'global',
-        defaultValue: 20
+        defaultValue: 20,
       };
 
       engine.registerVariable(var1);
@@ -276,7 +305,7 @@ describe('VariableEngine', () => {
       const allVars = engine.getAllVariables();
       expect(allVars).toEqual({
         x: 10,
-        y: 20
+        y: 20,
       });
     });
   });
@@ -294,7 +323,7 @@ describe('VariableEngine', () => {
         name: 'cohortAnxiety',
         type: 'object',
         scope: 'global',
-        defaultValue: { mean: 0, sd: 0, n: 0 }
+        defaultValue: { mean: 0, sd: 0, n: 0 },
       };
       engine.registerVariable(bundle);
       engine.setVariable(
@@ -318,14 +347,14 @@ describe('VariableEngine', () => {
         name: 'cohortMeanAnxiety',
         type: 'number',
         scope: 'global',
-        defaultValue: 0
+        defaultValue: 0,
       };
       const score: Variable = {
         id: 'score_total',
         name: 'score_total',
         type: 'number',
         scope: 'global',
-        defaultValue: 0
+        defaultValue: 0,
       };
       engine.registerVariable(scalar);
       engine.registerVariable(score);
@@ -343,7 +372,7 @@ describe('VariableEngine', () => {
         name: 'cohortMeanAnxiety',
         type: 'number',
         scope: 'global',
-        defaultValue: 25
+        defaultValue: 25,
       };
       engine.registerVariable(scalar);
       // Never setVariable'd (offline, never synced): resolves to defaultValue.
@@ -356,7 +385,7 @@ describe('VariableEngine', () => {
         id: 'cohortAnxiety',
         name: 'cohortAnxiety',
         type: 'object',
-        scope: 'global'
+        scope: 'global',
       };
       engine.registerVariable(bundle);
       engine.setVariable('cohortAnxiety', { mean: 42, n: 10 }, 'server-sync');
