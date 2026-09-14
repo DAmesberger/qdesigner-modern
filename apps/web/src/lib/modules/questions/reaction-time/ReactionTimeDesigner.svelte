@@ -64,7 +64,14 @@
     src: Question & { config?: unknown }
   ): Question & { config: ReactionTimeConfig } {
     const snapshot = $state.snapshot(src) as Question;
-    return { ...snapshot, config: createDesignerConfig(src?.config) } as Question & {
+    return { ...snapshot, config: createDesignerConfig({
+      ...toRecord(src.config ?? src.display),
+      response: {
+        ...toRecord(src.response),
+        ...toRecord(src.responseType),
+        ...toRecord(toRecord(src.config ?? src.display).response),
+      },
+    }) } as Question & {
       config: ReactionTimeConfig;
     };
   }
@@ -180,7 +187,7 @@
   }
 
   function createDesignerConfig(source: unknown): ReactionTimeConfig {
-    const sourceRecord = toRecord(source);
+    const sourceRecord = toRecord($state.snapshot(source));
     const normalized = normalizeReactionQuestionConfig({ config: sourceRecord });
     const prompt =
       typeof sourceRecord.prompt === 'string' && sourceRecord.prompt.trim().length > 0
@@ -188,6 +195,8 @@
         : 'Reaction Time Task';
 
     const config: ReactionTimeConfig = {
+      ...(Array.isArray(sourceRecord.blocks) ? { blocks: structuredClone(sourceRecord.blocks) as ReactionTimeConfig['blocks'] } : {}),
+      ...(normalized.counterbalance ? { counterbalance: normalized.counterbalance } : {}),
       task: normalized.task as ReactionTimeConfig['task'],
       stimulus: normalized.stimulus as ReactionTimeConfig['stimulus'],
       response: normalized.response,
@@ -436,11 +445,15 @@
           Build fully programmable reaction tasks with visual blocks and trial templates. No JSON is
           required.
         </p>
-        <BlockEditor bind:blocks={question.config.study.blocks} />
+        {#if question.config.blocks}
+          <BlockEditor bind:blocks={question.config.blocks} />
+        {:else}
+          <BlockEditor bind:blocks={question.config.study.blocks} />
+        {/if}
       </div>
 
-      <CounterbalancingFields bind:schemes={question.config.study.counterbalance} />
     {/if}
+    <CounterbalancingFields bind:schemes={question.config.counterbalance} />
   </div>
 
   <!-- Stimulus Configuration -->

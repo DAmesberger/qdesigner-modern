@@ -35,7 +35,16 @@ export interface PortableModuleDefinition {
     date?: boolean;
   }>;
   dateValues?: string[];
+  effectiveReactionResponse?: boolean;
   uniqueItemKeys?: Array<{ path: string; key: string }>;
+  orderedValuePairs?: Array<{ path: string; lower: string; upper: string }>;
+  itemReferences?: Array<{
+    path: string;
+    field: string;
+    collection: string;
+    key: string;
+    fallbackCollections?: string[];
+  }>;
 }
 
 export function getModuleDefinition(type: string): PortableModuleDefinition {

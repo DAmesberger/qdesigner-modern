@@ -53,11 +53,21 @@ const DEFAULT_NBACK: NBackTaskConfig = {
 
 export function normalizeReactionQuestionConfig(question: unknown): NormalizedReactionConfig {
   const questionPayload = toRecord(question);
-  const root =
+  const authored =
     toRecord(questionPayload?.config) ||
     toRecord(questionPayload?.display) ||
     (toRecord(question) as Record<string, unknown>) ||
     {};
+
+  // Older native questions put response settings in the question envelope.
+  // Explicit scientific Config fields win, but absent fields retain that source.
+  const envelopeResponse = {
+    ...toRecord(questionPayload?.response),
+    ...toRecord(questionPayload?.responseType),
+  };
+  const root = Object.keys(envelopeResponse).length > 0
+    ? { ...authored, response: { ...envelopeResponse, ...toRecord(authored.response) } }
+    : authored;
 
   const source = pickNormalizationSource(root);
   const taskType = normalizeTaskType(source.task?.type);
@@ -822,7 +832,9 @@ function normalizeStudyTrialTemplate(
     fixationMs,
     fixationType,
     preStimulusDelayMs,
+    ...(optionalFrameCount(record.preStimulusDelayFrames) !== undefined ? { preStimulusDelayFrames: optionalFrameCount(record.preStimulusDelayFrames) } : {}),
     stimulusDurationMs,
+    ...(optionalFrameCount(record.stimulusDurationFrames) !== undefined ? { stimulusDurationFrames: optionalFrameCount(record.stimulusDurationFrames) } : {}),
     responseTimeoutMs,
     interTrialIntervalMs,
     targetFPS,
@@ -847,6 +859,7 @@ function normalizePhases(value: unknown): ScheduledPhase[] | undefined {
     phases.push({
       name,
       durationMs: asInt(record.durationMs, 0, 0, 30000, 0),
+      ...(optionalFrameCount(record.durationFrames) !== undefined ? { durationFrames: optionalFrameCount(record.durationFrames) } : {}),
       allowResponse: typeof record.allowResponse === 'boolean' ? record.allowResponse : undefined,
       marksStimulusOnset:
         typeof record.marksStimulusOnset === 'boolean' ? record.marksStimulusOnset : undefined,
@@ -854,6 +867,11 @@ function normalizePhases(value: unknown): ScheduledPhase[] | undefined {
   });
 
   return phases;
+}
+
+/** Preserve authored frame budgets; an omitted budget keeps millisecond timing. */
+export function optionalFrameCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

@@ -1,4 +1,6 @@
-import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
+import { tick, type ComponentProps } from 'svelte';
+import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import ReactionTimeDesigner from './ReactionTimeDesigner.svelte';
 import { designerStore } from '$lib/stores/designer.svelte';
@@ -42,6 +44,47 @@ function seedReactionQuestion(config: Record<string, unknown>) {
 describe('ReactionTimeDesigner', () => {
   afterEach(() => cleanup());
 
+  it('preserves explicit trials and counterbalancing when changing an unrelated display setting', async () => {
+    const config = {
+      task: { type: 'standard' },
+      blocks: [
+        {
+          id: 'authored',
+          name: 'Authored',
+          kind: 'test',
+          trials: [
+            {
+              id: 'trial',
+              stimulus: { kind: 'text', text: 'Respond' },
+              validKeys: ['k'],
+              responseTimeoutMs: 1700,
+            },
+          ],
+        },
+      ],
+      counterbalance: [
+        { factor: 'key-mapping', levels: ['original', 'reversed'], method: 'round-robin' },
+      ],
+    };
+    const question = seedReactionQuestion(config);
+    const onUpdate = vi.fn();
+    const screen = render(ReactionTimeDesigner, {
+      question: question as ComponentProps<typeof ReactionTimeDesigner>['question'],
+      onUpdate,
+    });
+    await tick();
+    await tick();
+    expect(onUpdate).not.toHaveBeenCalled();
+    await fireEvent.change(screen.getByLabelText('Target FPS'), { target: { value: '60' } });
+    await waitFor(() => expect(onUpdate).toHaveBeenCalled());
+    const saved = onUpdate.mock.calls.at(-1)?.[0];
+    const before = normalizeReactionQuestionConfig({ config });
+    const after = normalizeReactionQuestionConfig(saved);
+    expect(after.blocks).toEqual(before.blocks);
+    expect(after.counterbalance).toEqual(before.counterbalance);
+    expect(after.targetFPS).toBe(60);
+  });
+
   it('renders the visual BlockEditor for the custom paradigm', async () => {
     const question = seedReactionQuestion({ task: { type: 'custom' } });
     render(ReactionTimeDesigner, {
@@ -73,7 +116,12 @@ describe('ReactionTimeDesigner', () => {
       task: { type: 'custom' },
       study: {
         blocks: [
-          { id: 'test', name: 'Test', kind: 'test', trials: [{ id: 't1', stimulus: { kind: 'text', text: 'GO' } }] },
+          {
+            id: 'test',
+            name: 'Test',
+            kind: 'test',
+            trials: [{ id: 't1', stimulus: { kind: 'text', text: 'GO' } }],
+          },
         ],
       },
     });

@@ -1,0 +1,1408 @@
+[
+  {
+    "id": "standard",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "standard"
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": true,
+        "mode": "keyboard",
+        "captureKeyUp": false,
+        "responseSet": {
+          "id": "choices",
+          "options": [
+            {
+              "id": "yes",
+              "label": "Yes",
+              "bindings": [
+                {
+                  "source": "keyboard",
+                  "key": "k",
+                  "on": "up"
+                },
+                {
+                  "source": "pointer",
+                  "region": {
+                    "x": 0.25,
+                    "y": 0.5,
+                    "radius": 0.2
+                  }
+                },
+                {
+                  "source": "touch",
+                  "region": {
+                    "x": 0.25,
+                    "y": 0.5,
+                    "radius": 0.2
+                  }
+                },
+                {
+                  "source": "gamepad",
+                  "button": 2
+                },
+                {
+                  "source": "hid",
+                  "button": 3,
+                  "on": "down"
+                }
+              ]
+            },
+            {
+              "id": "no",
+              "label": "No",
+              "bindings": [
+                {
+                  "source": "keyboard",
+                  "key": "l",
+                  "on": "down"
+                }
+              ]
+            }
+          ]
+        },
+        "correctOptionIds": [
+          "yes"
+        ]
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "n-back",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "n-back",
+        "nBack": {
+          "n": 2,
+          "sequenceLength": 3,
+          "targetRate": 0.3,
+          "stimulusSet": [
+            "A",
+            "B",
+            "C",
+            "D"
+          ],
+          "targetKey": "f",
+          "nonTargetKey": "j",
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "stroop",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "stroop",
+        "stroop": {
+          "trialCount": 3,
+          "colors": [
+            "red",
+            "blue",
+            "green",
+            "yellow"
+          ],
+          "congruentRatio": 0.5,
+          "stimulusDuration": 0,
+          "isi": 250,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "flanker",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "flanker",
+        "flanker": {
+          "trialCount": 3,
+          "stimulusSet": [
+            ">",
+            "<"
+          ],
+          "congruentRatio": 0.5,
+          "includeNeutral": false,
+          "neutralRatio": 0.2,
+          "flankerCount": 2,
+          "stimulusDuration": 0,
+          "isi": 250,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "iat",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "iat",
+        "iat": {
+          "category1Name": "Flowers",
+          "category1Items": [
+            "Rose",
+            "Lily",
+            "Tulip",
+            "Daisy"
+          ],
+          "category2Name": "Insects",
+          "category2Items": [
+            "Ant",
+            "Beetle",
+            "Wasp",
+            "Moth"
+          ],
+          "attribute1Name": "Pleasant",
+          "attribute1Items": [
+            "Happy",
+            "Joyful",
+            "Love",
+            "Peace"
+          ],
+          "attribute2Name": "Unpleasant",
+          "attribute2Items": [
+            "Ugly",
+            "Nasty",
+            "Evil",
+            "Hurt"
+          ],
+          "trialsPerBlock": 3,
+          "practiceTrialsPerBlock": 3,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dot-probe",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "dot-probe",
+        "dotProbe": {
+          "trialCount": 3,
+          "cueDuration": 500,
+          "isi": 500,
+          "congruentRatio": 0.5,
+          "probeSymbol": "*",
+          "stimulusPairs": [
+            {
+              "salient": "THREAT",
+              "neutral": "NEUTRAL"
+            }
+          ],
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "go-nogo",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "go-nogo",
+        "goNoGo": {
+          "trialCount": 3,
+          "goRatio": 0.75,
+          "goStimulus": "GO",
+          "noGoStimulus": "STOP",
+          "responseKey": "f",
+          "stimulusDuration": 0,
+          "isi": 500,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "sart",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "sart",
+        "sart": {
+          "trialCount": 3,
+          "targetDigit": 3,
+          "digits": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "responseKey": "f",
+          "stimulusDuration": 250,
+          "isi": 900,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "simon",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "simon",
+        "simon": {
+          "trialCount": 3,
+          "congruentRatio": 0.5,
+          "leftColor": "blue",
+          "rightColor": "red",
+          "leftKey": "f",
+          "rightKey": "j",
+          "stimulusDuration": 0,
+          "isi": 500,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "posner",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "posner",
+        "posner": {
+          "trialCount": 3,
+          "validRatio": 0.8,
+          "cueDurationMs": 100,
+          "soaMs": 200,
+          "leftKey": "f",
+          "rightKey": "j",
+          "isi": 500,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "visual-search",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "visual-search",
+        "visualSearch": {
+          "trialCount": 3,
+          "setSizes": [
+            4,
+            8,
+            16
+          ],
+          "targetPresentRatio": 0.5,
+          "featureSearch": false,
+          "targetChar": "T",
+          "distractorChars": [
+            "L",
+            "F",
+            "E"
+          ],
+          "presentKey": "j",
+          "absentKey": "f",
+          "stimulusDuration": 0,
+          "isi": 500,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "sternberg",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "sternberg",
+        "sternberg": {
+          "trialCount": 3,
+          "setSizes": [
+            2,
+            4,
+            6
+          ],
+          "targetPresentRatio": 0.5,
+          "memoryItems": [
+            "B",
+            "C",
+            "D",
+            "F",
+            "G",
+            "H",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "P"
+          ],
+          "presentKey": "j",
+          "absentKey": "f",
+          "encodingMs": 400,
+          "retentionMs": 1000,
+          "isi": 500,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "pvt",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "pvt",
+        "pvt": {
+          "trialCount": 3,
+          "isi": {
+            "dist": "uniform",
+            "min": 2000,
+            "max": 10000
+          },
+          "responseKey": "f",
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "temporal-order",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "temporal-order",
+        "temporalOrder": {
+          "trialCount": 3,
+          "soaSetMs": [
+            17,
+            33,
+            67,
+            133,
+            267
+          ],
+          "firstKey": "f",
+          "secondKey": "j",
+          "stimulusDuration": 0,
+          "isi": 500,
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "rsvp",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "rsvp",
+        "rsvp": {
+          "trialCount": 3,
+          "streamLength": 12,
+          "itemDurationMs": 100,
+          "targetKey": "f",
+          "targetSet": [
+            "X",
+            "Z"
+          ],
+          "distractorSet": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H"
+          ],
+          "fixationMs": {
+            "dist": "uniform",
+            "min": 100,
+            "max": 200
+          },
+          "responseTimeoutMs": {
+            "dist": "uniform",
+            "min": 1000,
+            "max": 1500
+          }
+        }
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": false,
+        "mode": "keyboard",
+        "captureKeyUp": false
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  },
+  {
+    "id": "custom",
+    "type": "reaction-time",
+    "required": false,
+    "config": {
+      "task": {
+        "type": "custom"
+      },
+      "stimulus": {
+        "type": "shape",
+        "content": "circle",
+        "fixation": {
+          "type": "cross",
+          "duration": 500
+        }
+      },
+      "response": {
+        "validKeys": [
+          "f",
+          "j"
+        ],
+        "timeout": 2000,
+        "requireCorrect": true,
+        "mode": "keyboard",
+        "captureKeyUp": false,
+        "responseSet": {
+          "id": "choices",
+          "options": [
+            {
+              "id": "yes",
+              "label": "Yes",
+              "bindings": [
+                {
+                  "source": "keyboard",
+                  "key": "k",
+                  "on": "up"
+                },
+                {
+                  "source": "pointer",
+                  "region": {
+                    "x": 0.25,
+                    "y": 0.5,
+                    "radius": 0.2
+                  }
+                },
+                {
+                  "source": "touch",
+                  "region": {
+                    "x": 0.25,
+                    "y": 0.5,
+                    "radius": 0.2
+                  }
+                },
+                {
+                  "source": "gamepad",
+                  "button": 2
+                },
+                {
+                  "source": "hid",
+                  "button": 3,
+                  "on": "down"
+                }
+              ]
+            },
+            {
+              "id": "no",
+              "label": "No",
+              "bindings": [
+                {
+                  "source": "keyboard",
+                  "key": "l",
+                  "on": "down"
+                }
+              ]
+            }
+          ]
+        },
+        "correctOptionIds": [
+          "yes"
+        ]
+      },
+      "correctKey": "",
+      "feedback": true,
+      "feedbackSettings": {
+        "mode": "both",
+        "durationMs": 250,
+        "correctText": "Correct",
+        "incorrectText": "Incorrect",
+        "tooSlowText": "No response"
+      },
+      "practice": false,
+      "practiceTrials": 0,
+      "testTrials": 3,
+      "targetFPS": 120,
+      "blocks": [
+        {
+          "id": "test",
+          "name": "Test",
+          "kind": "test",
+          "randomizeOrder": true,
+          "repetitions": 2,
+          "trials": [
+            {
+              "id": "reaction-time-1",
+              "name": "reaction-time-1",
+              "isPractice": false,
+              "repeat": 1,
+              "stimulus": {
+                "kind": "shape",
+                "shape": "circle",
+                "radiusPx": 80
+              },
+              "validKeys": [
+                "f",
+                "j"
+              ],
+              "requireCorrect": false,
+              "fixationMs": 500,
+              "fixationType": "cross",
+              "responseTimeoutMs": 2000,
+              "interTrialIntervalMs": 500,
+              "targetFPS": 120,
+              "phases": [
+                {
+                  "name": "mask",
+                  "durationMs": 25,
+                  "durationFrames": 3,
+                  "allowResponse": false
+                },
+                {
+                  "name": "target",
+                  "durationMs": 100,
+                  "durationFrames": 12,
+                  "allowResponse": true,
+                  "marksStimulusOnset": true
+                }
+              ],
+              "preStimulusDelayFrames": 2,
+              "stimulusDurationFrames": 3
+            },
+            {
+              "id": "reaction-time-2",
+              "name": "reaction-time-2",
+              "isPractice": false,
+              "repeat": 1,
+              "stimulus": {
+                "kind": "shape",
+                "shape": "circle",
+                "radiusPx": 80
+              },
+              "validKeys": [
+                "f",
+                "j"
+              ],
+              "requireCorrect": false,
+              "fixationMs": 500,
+              "fixationType": "cross",
+              "responseTimeoutMs": 2000,
+              "interTrialIntervalMs": 500,
+              "targetFPS": 120,
+              "phases": [
+                {
+                  "name": "mask",
+                  "durationMs": 25,
+                  "durationFrames": 3,
+                  "allowResponse": false
+                },
+                {
+                  "name": "target",
+                  "durationMs": 100,
+                  "durationFrames": 12,
+                  "allowResponse": true,
+                  "marksStimulusOnset": true
+                }
+              ],
+              "preStimulusDelayFrames": 2,
+              "stimulusDurationFrames": 3
+            },
+            {
+              "id": "reaction-time-3",
+              "name": "reaction-time-3",
+              "isPractice": false,
+              "repeat": 1,
+              "stimulus": {
+                "kind": "shape",
+                "shape": "circle",
+                "radiusPx": 80
+              },
+              "validKeys": [
+                "f",
+                "j"
+              ],
+              "requireCorrect": false,
+              "fixationMs": 500,
+              "fixationType": "cross",
+              "responseTimeoutMs": 2000,
+              "interTrialIntervalMs": 500,
+              "targetFPS": 120,
+              "phases": [
+                {
+                  "name": "mask",
+                  "durationMs": 25,
+                  "durationFrames": 3,
+                  "allowResponse": false
+                },
+                {
+                  "name": "target",
+                  "durationMs": 100,
+                  "durationFrames": 12,
+                  "allowResponse": true,
+                  "marksStimulusOnset": true
+                }
+              ],
+              "preStimulusDelayFrames": 2,
+              "stimulusDurationFrames": 3
+            }
+          ]
+        }
+      ],
+      "counterbalance": [
+        {
+          "factor": "key-mapping",
+          "levels": [
+            "original",
+            "reversed"
+          ],
+          "method": "round-robin"
+        }
+      ]
+    }
+  }
+]

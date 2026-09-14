@@ -5,6 +5,8 @@ import type {
   PvtTaskConfig,
   ReactionFeedbackSettings,
   ReactionStudyConfig,
+  ReactionStudyBlock,
+  CounterbalanceScheme,
   RsvpTaskConfig,
   SartTaskConfig,
   SimonTaskConfig,
@@ -51,6 +53,8 @@ export interface MediaStimulusRef {
 
 export interface ReactionTimeConfig {
   study?: ReactionStudyConfig;
+  blocks?: ReactionStudyBlock[];
+  counterbalance?: CounterbalanceScheme[];
   task: {
     type: ReactionTaskType;
     nBack: {

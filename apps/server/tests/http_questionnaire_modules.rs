@@ -17,6 +17,121 @@ fn definition(question: Value) -> Value {
 }
 
 #[tokio::test]
+async fn all_reaction_paradigms_preserve_the_authored_scientific_configuration() {
+    let fixtures: Vec<Value> =
+        serde_json::from_str(include_str!("fixtures/qdef-reaction-configs.json")).unwrap();
+    assert_eq!(fixtures.len(), 16);
+    for mut fixture in fixtures {
+        fixture.as_object_mut().unwrap().remove("id");
+        assert_module_round_trip(fixture).await;
+    }
+}
+
+#[tokio::test]
+async fn every_reaction_lab_template_preserves_its_complete_materialized_configuration() {
+    let fixtures: Vec<Value> =
+        serde_json::from_str(include_str!("fixtures/qdef-reaction-lab-configs.json")).unwrap();
+    assert_eq!(fixtures.len(), 7);
+    for mut fixture in fixtures {
+        fixture.as_object_mut().unwrap().remove("id");
+        assert_module_round_trip(fixture).await;
+    }
+}
+
+#[tokio::test]
+async fn every_procedural_paradigm_rejects_invalid_timing_specs() {
+    let fixtures: Vec<Value> =
+        serde_json::from_str(include_str!("fixtures/qdef-reaction-configs.json")).unwrap();
+    let mut checked = 0;
+    for mut fixture in fixtures {
+        fixture.as_object_mut().unwrap().remove("id");
+        let branch = fixture["config"]["task"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .find(|key| key.as_str() != "type")
+            .cloned();
+        if let Some(branch) = branch {
+            fixture["config"]["task"][&branch]["responseTimeoutMs"] =
+                json!({"dist":"normal","min":1000,"max":1500});
+            assert_invalid_module(
+                fixture,
+                &format!("/questions/answer/config/task/{branch}/responseTimeoutMs"),
+            )
+            .await;
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 14);
+    assert_invalid_module(
+        json!({"type":"webgl","config":{"timing":{"responseDuration":-1}}}),
+        "/questions/answer/config/timing/responseDuration",
+    )
+    .await;
+    assert_invalid_module(json!({"type":"reaction-experiment","config":{"randomization":{"positionMode":"unseeded"}}}), "/questions/answer/config/randomization/positionMode").await;
+}
+
+#[tokio::test]
+async fn reaction_uniform_bounds_and_response_references_report_exact_paths() {
+    assert_invalid_module(json!({"type":"reaction-time", "config":{"task":{"type":"n-back", "nBack":{"fixationMs":{"dist":"uniform", "min":200,"max":100}}}}}), "/questions/answer/config/task/nBack/fixationMs/max").await;
+    assert_invalid_module(json!({"type":"reaction-time", "config":{"response":{"responseSet":{"options":[{"id":"yes","bindings":[{"source":"keyboard","key":"k"}]}]},"correctOptionIds":["missing"]}}}), "/questions/answer/config/response/correctOptionIds/0").await;
+    assert_invalid_module(json!({"type":"reaction-time", "config":{"blocks":[{"id":"block","name":"Block","kind":"test","trials":[{"id":"duplicate"},{"id":"duplicate"}]}]}}), "/questions/answer/config/blocks/0/trials/1/id").await;
+}
+
+#[tokio::test]
+async fn native_reaction_keypress_envelope_is_portable() {
+    assert_module_round_trip(json!({"type":"reaction-time","required":true,"responseType":{"type":"keypress","keys":["space"]},"config":{"task":{"type":"standard"},"response":{"validKeys":["f","j"],"timeout":1500}}})).await;
+}
+
+#[tokio::test]
+async fn reaction_binding_sources_frame_budgets_and_task_parameters_are_validated() {
+    for binding in [
+        json!({"source":"keyboard","key":"k","on":"hold"}),
+        json!({"source":"gamepad","button":-1}),
+        json!({"source":"hid","button":1.5}),
+        json!({"source":"touch","region":{"x":1.1,"y":0.5,"radius":0.2}}),
+        json!({"source":"pointer","region":{"x":0.5,"y":0.5,"radius":-0.1}}),
+        json!({"source":"serial","button":1}),
+    ] {
+        assert_invalid_module(json!({"type":"reaction-time","config":{"response":{"responseSet":{"options":[{"id":"yes","bindings":[binding]}]}}}}), "/questions/answer/config/response/responseSet/options/0/bindings/0").await;
+    }
+    for (field, value) in [
+        ("preStimulusDelayFrames", json!(-1)),
+        ("stimulusDurationFrames", json!(1.5)),
+    ] {
+        let mut trial = json!({"id":"trial"});
+        trial[field] = value;
+        assert_invalid_module(json!({"type":"reaction-time","config":{"blocks":[{"id":"block","name":"Block","kind":"test","trials":[trial]}]}}), &format!("/questions/answer/config/blocks/0/trials/0/{field}")).await;
+    }
+    assert_invalid_module(
+        json!({"type":"reaction-time","config":{"task":{"type":"unsupported"}}}),
+        "/questions/answer/config/task/type",
+    )
+    .await;
+    assert_invalid_module(json!({"type":"reaction-time","config":{"task":{"type":"stroop","stroop":{"trialCount":0}}}}), "/questions/answer/config/task/stroop/trialCount").await;
+}
+
+#[tokio::test]
+async fn reaction_correctness_can_reference_the_inherited_response_set() {
+    assert_module_round_trip(json!({"type":"reaction-time","required":true,"response":{"responseSet":{"options":[{"id":"yes","bindings":[{"source":"keyboard","key":"k"}]}]}},"config":{"task":{"type":"standard"},"response":{"correctOptionIds":["yes"],"requireCorrect":true}}})).await;
+}
+
+#[tokio::test]
+async fn reaction_correctness_uses_the_effective_set_when_config_overrides_the_envelope() {
+    assert_invalid_module(json!({"type":"reaction-time","response":{"responseSet":{"options":[{"id":"yes","bindings":[{"source":"keyboard","key":"k"}]}]},"correctOptionIds":["yes"],"requireCorrect":true},"config":{"task":{"type":"standard"},"response":{"responseSet":{"options":[{"id":"no","bindings":[{"source":"keyboard","key":"l"}]}]}}}}), "/questions/answer/response/correctOptionIds/0").await;
+}
+
+#[tokio::test]
+async fn reaction_config_rejects_values_that_would_change_scientific_meaning_on_normalization() {
+    for source in ["pointer", "touch"] {
+        assert_invalid_module(json!({"type":"reaction-time","config":{"response":{"responseSet":{"options":[{"id":"yes","bindings":[{"source":source,"region":{"x":0.25,"y":0.5,"radius":0}}]}]}}}}), "/questions/answer/config/response/responseSet/options/0/bindings/0").await;
+    }
+    assert_invalid_module(json!({"type":"reaction-time","config":{"response":{"responseSet":{"options":[{"id":"yes","bindings":[{"source":"keyboard","key":"k"}]},{"id":" yes ","bindings":[{"source":"keyboard","key":"l"}]}]}}}}), "/questions/answer/config/response/responseSet/options/1/id").await;
+    assert_invalid_module(json!({"type":"reaction-time","config":{"feedbackSettings":{"mode":"both","durationMs":15000}}}), "/questions/answer/config/feedbackSettings/durationMs").await;
+    assert_invalid_module(json!({"type":"reaction-time","config":{"blocks":[{"id":"block","name":"Block","kind":"test","trials":[{"id":"trial","phases":[{"name":"stimulus","durationMs":30001}]}]}]}}), "/questions/answer/config/blocks/0/trials/0/phases/0/durationMs").await;
+}
+
+#[tokio::test]
 async fn every_catalogue_default_is_a_valid_portable_configuration() {
     let catalogue: Value = serde_json::from_str(include_str!(
         "../../../packages/questionnaire-core/src/module-catalogue.json"
@@ -25,8 +140,8 @@ async fn every_catalogue_default_is_a_valid_portable_configuration() {
     let modules = catalogue["modules"].as_object().unwrap();
     assert_eq!(
         modules.len(),
-        18,
-        "Keep the form/display inventory explicit"
+        21,
+        "Keep all 18 form/display and three reaction modules explicit"
     );
     for (kind, module) in modules {
         // Metadata defaults contain both envelope fields and flat module Config
@@ -79,6 +194,26 @@ async fn common_presentation_visibility_and_deadlines_are_portable_configuration
 }
 
 async fn assert_module_round_trip(question: Value) {
+    let settings = definition(question.clone())["settings"].clone();
+    assert_module_and_settings_round_trip(question, settings).await;
+}
+
+#[tokio::test]
+async fn reaction_validity_policy_and_randomization_seed_preserve_explicit_and_default_behavior() {
+    for policy in [None, Some("record"), Some("enforce")] {
+        let mut settings = json!({"allowBackNavigation": false, "showProgressBar": false, "randomizationSeed": "study-seed-7", "webgl":{"targetFPS":120,"antialias":false,"pixelRatio":1.5}});
+        if let Some(policy) = policy {
+            settings["validityPolicy"] = json!(policy);
+        }
+        assert_module_and_settings_round_trip(
+            json!({"type":"reaction-time","required":false,"config":{"task":{"type":"standard"}}}),
+            settings,
+        )
+        .await;
+    }
+}
+
+async fn assert_module_and_settings_round_trip(question: Value, settings: Value) {
     let Some(state) = build_test_state().await else {
         return;
     };
@@ -89,9 +224,18 @@ async fn assert_module_round_trip(question: Value) {
         "/api/projects/{}/questionnaire-definitions/apply",
         tenant.project_id
     );
-    let (status, imported) = json_request(&app, "POST", &uri, Some(&owner.token), Some(&json!({
-        "definition": definition(question.clone()).to_string(), "commit": true, "idempotencyKey": "module-import"
-    }))).await;
+    let mut document = definition(question.clone());
+    document["settings"] = settings.clone();
+    let (status, imported) = json_request(
+        &app,
+        "POST",
+        &uri,
+        Some(&owner.token),
+        Some(&json!({
+            "definition": document.to_string(), "commit": true, "idempotencyKey": "module-import"
+        })),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{}: {imported:?}", question["type"]);
     let id = imported["questionnaireId"].as_str().unwrap();
     let (status, exported) = json_request(
@@ -108,6 +252,7 @@ async fn assert_module_round_trip(question: Value) {
     assert_eq!(status, StatusCode::OK, "{exported:?}");
     let canonical: Value = serde_json::from_str(exported["canonical"].as_str().unwrap()).unwrap();
     assert_eq!(canonical["questions"]["answer"], question);
+    assert_eq!(canonical["settings"], settings);
     assert_eq!(exported["canonical"], imported["canonical"]);
     assert_eq!(exported["digest"], imported["digest"]);
 }

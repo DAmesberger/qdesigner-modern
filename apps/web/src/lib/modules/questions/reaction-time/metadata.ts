@@ -1,25 +1,8 @@
-// Reaction Time question metadata
-
 import type { ModuleMetadata } from '$lib/modules/types';
-import { AnswerTypes } from '../shared/answerTypes';
-import { createLegacyStarterPayload } from './model/starter-templates';
-
-const standardStarter = createLegacyStarterPayload('standard');
+import { getModuleDefinition } from '@qdesigner/questionnaire-core';
 
 export const metadata: ModuleMetadata = {
-  type: 'reaction-time',
-  category: 'question',
-  name: 'Reaction Time',
-  icon: '⚡',
-  description: 'High-precision reaction time measurement with customizable stimuli',
-  capabilities: {
-    supportsScripting: true,
-    supportsConditionals: true,
-    supportsValidation: false,
-    supportsAnalytics: true,
-    supportsTiming: true,
-    supportsVariables: true,
-  },
+  ...getModuleDefinition('reaction-time'),
   components: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     runtime: () => import('./ReactionTime.svelte') as any,
@@ -33,9 +16,4 @@ export const metadata: ModuleMetadata = {
       return new ReactionTimeRuntime();
     },
   },
-  defaultConfig: {
-    ...standardStarter,
-    prompt: 'Reaction Time Task',
-  },
-  answerType: AnswerTypes.REACTION_TIME,
 };

@@ -1163,6 +1163,15 @@ export type ReactionTaskType =
   | 'flanker'
   | 'iat'
   | 'dot-probe'
+  | 'go-nogo'
+  | 'sart'
+  | 'simon'
+  | 'posner'
+  | 'visual-search'
+  | 'sternberg'
+  | 'pvt'
+  | 'temporal-order'
+  | 'rsvp'
   | 'custom';
 
 export interface ReactionStudyConfig {

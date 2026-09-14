@@ -29,6 +29,10 @@ export async function addModule(
   }
   await page.getByTestId(`designer-module-category-${category}`).click();
   await page.getByTestId(`designer-module-${type}`).click();
+  if (type === 'reaction-experiment') {
+    // Adding this module intentionally opens its dedicated authoring workspace.
+    await page.getByRole('button', { name: 'Exit Lab', exact: true }).click();
+  }
   await designer.closeFlyoutIfOpen();
   await expect(page.getByLabel('Question Type', { exact: true })).toHaveValue(type);
   const input = page.getByTestId('designer-question-internal-name');

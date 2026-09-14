@@ -542,6 +542,10 @@ struct QDefSettings {
     save_progress: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     webgl: Option<QDefWebGlSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    validity_policy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    randomization_seed: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1198,6 +1202,43 @@ fn semantic_version(source: &str) -> Option<[i32; 3]> {
 
 fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
     let mut diagnostics = Vec::new();
+    if document
+        .settings
+        .validity_policy
+        .as_deref()
+        .is_some_and(|policy| !["record", "enforce"].contains(&policy))
+    {
+        diagnostics.push(error(
+            "QDEF_CONFIG_INVALID",
+            "/settings/validityPolicy",
+            "Validity policy must be 'record' or 'enforce'.",
+            Some("Omit the field for the default record policy, or select an explicit policy."),
+        ));
+    }
+    if let Some(webgl) = &document.settings.webgl {
+        if webgl
+            .target_fps
+            .is_some_and(|fps| !(30..=240).contains(&fps))
+        {
+            diagnostics.push(error(
+                "QDEF_CONFIG_INVALID",
+                "/settings/webgl/targetFPS",
+                "Target FPS must be between 30 and 240.",
+                Some("Choose a supported target frame rate."),
+            ));
+        }
+        if webgl
+            .pixel_ratio
+            .is_some_and(|ratio| !ratio.is_finite() || ratio <= 0.0)
+        {
+            diagnostics.push(error(
+                "QDEF_CONFIG_INVALID",
+                "/settings/webgl/pixelRatio",
+                "Pixel ratio must be a positive finite number.",
+                Some("Choose a positive pixel ratio."),
+            ));
+        }
+    }
     if document.questionnaire.name.trim().is_empty()
         || document.questionnaire.name.chars().count() > 255
     {

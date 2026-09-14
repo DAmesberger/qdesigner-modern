@@ -163,10 +163,11 @@ export function createDefaultWebGLConfig(): WebGLConfig {
 
 export function normalizeWebGLQuestionConfig(questionLike: unknown): WebGLConfig {
   const root = toRecord(questionLike);
-  const config = toRecord(root.config);
+  const config = { ...toRecord(root.display), ...toRecord(root.config) };
   const stimulus = toRecord(config.stimulus);
   const response = {
     ...toRecord(root.response),
+    ...toRecord(root.responseType),
     ...toRecord(config.response),
   };
   const timing = toRecord(config.timing);
