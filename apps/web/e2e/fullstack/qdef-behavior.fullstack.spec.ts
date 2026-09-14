@@ -132,27 +132,29 @@ test('@fullstack portable behavior survives designer publication and produces co
           consent: { accepted: true, checkboxes: { agree: true }, signature: `Participant ${age}` },
         },
       });
-      const variablesResponse = await request.get(`/api/sessions/${sessionId}/variables`, {
-        headers: { Cookie: `qd_session=${workspace.sessionCookie}` },
-      });
-      expect(variablesResponse.status(), await variablesResponse.text()).toBe(200);
-      const variables: { variable_name: string; variable_value: unknown }[] =
-        await variablesResponse.json();
+      // Completion status and the offline variable queue synchronize separately.
+      // Assert the eventual stored score, not an incidental first-read ordering.
+      await expect
+        .poll(
+          async () => {
+            const response = await request.get(`/api/sessions/${sessionId}/variables`, {
+              headers: { Cookie: `qd_session=${workspace.sessionCookie}` },
+            });
+            expect(response.status(), await response.text()).toBe(200);
+            const variables: { variable_name: string; variable_value: unknown }[] =
+              await response.json();
+            return variables.find((v) => v.variable_name === 'score.wellbeing')?.variable_value;
+          },
+          { timeout: 30000 }
+        )
+        .toMatchObject(
+          age >= 18
+            ? { value: 4, z: 1, tScore: 60, itemsAnswered: 2, itemsExpected: 2 }
+            : { value: null, itemsAnswered: 0, itemsExpected: 2 }
+        );
       if (age >= 18) {
-        expect(
-          variables.find((v) => v.variable_name === 'score.wellbeing')?.variable_value
-        ).toMatchObject({
-          value: 4,
-          z: 1,
-          tScore: 60,
-          itemsAnswered: 2,
-          itemsExpected: 2,
-        });
         expect(stored.metadata.screenOut).toBeUndefined();
       } else {
-        expect(
-          variables.find((v) => v.variable_name === 'score.wellbeing')?.variable_value
-        ).toMatchObject({ value: null, itemsAnswered: 0, itemsExpected: 2 });
         await expect
           .poll(
             async () => (await getSessionById(request, sessionId, workspace)).metadata.screenOut,
