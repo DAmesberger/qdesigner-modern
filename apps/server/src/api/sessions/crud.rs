@@ -48,6 +48,12 @@ pub async fn create_session(
         return Err(ApiError::Forbidden("Questionnaire is not published".into()));
     }
 
+    crate::questionnaire_definition::require_stored_execution_capabilities(
+        &mut tx,
+        body.questionnaire_id,
+    )
+    .await?;
+
     // Per-QUESTIONNAIRE creation budget (default 600/60s). The route's per-IP
     // budget bounds one source; this bounds one STUDY, so a flood distributed
     // across many IPs still cannot spray this questionnaire's `arm_counts` and

@@ -4018,7 +4018,10 @@
                     "type": "string"
                   },
                   "source": {
-                    "enum": ["variable", "response"]
+                    "enum": [
+                      "variable",
+                      "response"
+                    ]
                   },
                   "key": {
                     "type": "string"
@@ -4063,6 +4066,18 @@
                   },
                   "fallbackNormTableId": {
                     "type": "string"
+                  },
+                  "questionnaireBinding": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "participantBinding": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "comparisonParticipantBinding": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               },
@@ -4170,7 +4185,10 @@
                     "type": "string"
                   },
                   "source": {
-                    "enum": ["variable", "response"]
+                    "enum": [
+                      "variable",
+                      "response"
+                    ]
                   },
                   "key": {
                     "type": "string"
@@ -4215,6 +4233,18 @@
                   },
                   "fallbackNormTableId": {
                     "type": "string"
+                  },
+                  "questionnaireBinding": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "participantBinding": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "comparisonParticipantBinding": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               },
@@ -4363,17 +4393,43 @@
               "required": ["dataSource"],
               "properties": {
                 "dataSource": {
-                  "required": ["questionnaireId", "key"],
+                  "required": [
+                    "key"
+                  ],
                   "properties": {
-                    "questionnaireId": {
-                      "type": "string",
-                      "minLength": 1
-                    },
                     "key": {
                       "type": "string",
                       "minLength": 1
                     }
-                  }
+                  },
+                  "allOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "questionnaireId"
+                          ],
+                          "properties": {
+                            "questionnaireId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        {
+                          "required": [
+                            "questionnaireBinding"
+                          ],
+                          "properties": {
+                            "questionnaireBinding": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 }
               }
             }
@@ -4559,17 +4615,62 @@
               "required": ["dataSource"],
               "properties": {
                 "dataSource": {
-                  "required": ["participantId", "comparisonParticipantId"],
-                  "properties": {
-                    "participantId": {
-                      "type": "string",
-                      "minLength": 1
+                  "required": [],
+                  "properties": {},
+                  "allOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "participantId"
+                          ],
+                          "properties": {
+                            "participantId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        {
+                          "required": [
+                            "participantBinding"
+                          ],
+                          "properties": {
+                            "participantBinding": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      ]
                     },
-                    "comparisonParticipantId": {
-                      "type": "string",
-                      "minLength": 1
+                    {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "comparisonParticipantId"
+                          ],
+                          "properties": {
+                            "comparisonParticipantId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        {
+                          "required": [
+                            "comparisonParticipantBinding"
+                          ],
+                          "properties": {
+                            "comparisonParticipantBinding": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      ]
                     }
-                  }
+                  ]
                 }
               }
             }
@@ -7682,6 +7783,57 @@
     "commonQuestion": {
       "type": "object",
       "properties": {
+        "settings": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "readOnly": {
+              "type": "boolean"
+            },
+            "showNumber": {
+              "type": "boolean"
+            },
+            "randomize": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "carryForward": {
+          "type": "object",
+          "properties": {
+            "sourceQuestionId": {
+              "type": "string"
+            },
+            "mode": {
+              "enum": [
+                "default-value",
+                "selected-options",
+                "unselected-options",
+                "text-content"
+              ]
+            },
+            "targetField": {
+              "enum": [
+                "value",
+                "options",
+                "prompt"
+              ]
+            }
+          },
+          "required": [
+            "sourceQuestionId",
+            "mode",
+            "targetField"
+          ],
+          "additionalProperties": false
+        },
         "navigation": {
           "type": "object",
           "properties": {

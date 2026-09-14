@@ -33,7 +33,7 @@ import { computeReactionTimeMs } from './reactionTiming';
 import { resolveFlowTargetPageIndex } from './flowTarget';
 import { orderFlowCandidates } from './FlowGraph';
 import { ScreenerController, type ScreenOutResult } from '$lib/fillout/services/ScreenerController';
-import { assertNoJavaScriptHooks } from '@qdesigner/questionnaire-core';
+import { assertNoJavaScriptHooks, assertExecutableDefinition } from '@qdesigner/questionnaire-core';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
 import type { AttentionCheckConfig } from '../quality/AttentionCheck';
@@ -301,6 +301,7 @@ export class QuestionnaireRuntime {
 
   constructor(config: RuntimeConfig) {
     assertNoJavaScriptHooks(config.questionnaire);
+    assertExecutableDefinition(config.questionnaire);
     this.config = config;
 
     this.session = {

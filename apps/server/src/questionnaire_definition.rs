@@ -3,12 +3,15 @@
 //! HTTP, UI, and future MCP adapters must cross this interface instead of
 //! maintaining their own serializers or validators.
 
+mod behavior;
+mod behavior_references;
 mod catalogue;
 mod diff;
 mod edits;
 mod persistence;
 mod projections;
 mod safety;
+mod source_bindings;
 
 pub use diff::{SemanticChange, SemanticChangeKind, SemanticDiff};
 pub use edits::StableDefinitionEdit;
@@ -444,6 +447,8 @@ struct QDefQuestionnaire {
     version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     default_locale: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    consent: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -503,6 +508,10 @@ struct QDefQuestion {
     layout: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     styling: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    settings: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    carry_forward: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -512,16 +521,19 @@ struct QDefStructure {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct QDefPage {
     id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    #[serde(default)]
     blocks: Vec<QDefBlock>,
+    #[serde(flatten)]
+    behavior: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct QDefBlock {
     id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -529,10 +541,12 @@ struct QDefBlock {
     #[serde(rename = "type")]
     kind: String,
     question_ids: Vec<String>,
+    #[serde(flatten)]
+    behavior: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct QDefSettings {
     #[serde(default)]
     allow_back_navigation: bool,
@@ -546,6 +560,8 @@ struct QDefSettings {
     validity_policy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     randomization_seed: Option<String>,
+    #[serde(flatten)]
+    behavior: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -586,7 +602,7 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
                 DefinitionReadFailure::Access(ApiError::NotFound("Questionnaire not found".into()))
             })?;
         let revision = stored.revision;
-        let document = match document_from_stored(stored) {
+        let document = match document_from_stored(stored, Some(input.questionnaire_id)) {
             Ok(document) => document,
             Err(diagnostics) => {
                 return Err(DefinitionReadFailure::Invalid(DefinitionReadError {
@@ -716,9 +732,12 @@ fn parse_source(source: &str) -> Result<Value, Vec<DefinitionDiagnostic>> {
     })
 }
 
-fn prepare_document(raw: Value) -> Result<PreparedDocument, Vec<DefinitionDiagnostic>> {
+fn prepare_document(mut raw: Value) -> Result<PreparedDocument, Vec<DefinitionDiagnostic>> {
+    behavior::normalize(&mut raw);
     let mut diagnostics = validate_envelope(&raw);
     safety::inspect(&raw, "", &mut diagnostics);
+    diagnostics.extend(behavior::validate(&raw));
+    source_bindings::inspect_portable(&raw, &mut diagnostics);
     if let Some(questions) = raw.get("questions").and_then(Value::as_object) {
         for (id, question) in questions {
             if let Some(kind) = question.get("type").and_then(Value::as_str) {
@@ -805,6 +824,7 @@ fn parse_unique_json(source: &str) -> Result<Value, serde_json::Error> {
 
 fn document_from_stored(
     stored: StoredQuestionnaire,
+    questionnaire_id: Option<Uuid>,
 ) -> Result<QDefDocument, Vec<DefinitionDiagnostic>> {
     let mut diagnostics = Vec::new();
     safety::inspect(&stored.content, "/content", &mut diagnostics);
@@ -841,12 +861,16 @@ fn document_from_stored(
             "pages",
             "variables",
             "flow",
+            "consent",
+            "translations",
+            "extensions",
         ],
         "/content",
         &mut diagnostics,
     );
-    diagnose_non_empty_capability(content, "variables", &mut diagnostics);
-    diagnose_non_empty_capability(content, "flow", &mut diagnostics);
+    let variables = behavior::stored_variables(content.get("variables"), &mut diagnostics);
+    let flow = behavior::stored_flow(content.get("flow"), &mut diagnostics);
+    let extensions = behavior::stored_extensions(content.get("extensions"), &mut diagnostics);
 
     let mut questions = BTreeMap::new();
     let stored_questions = match content.get("questions") {
@@ -890,7 +914,10 @@ fn document_from_stored(
             object.remove("responseType");
         }
 
-        let raw_question = Value::Object(object);
+        let mut raw_question = Value::Object(object);
+        if let Some(id) = &id {
+            source_bindings::export_question(id, &mut raw_question, questionnaire_id);
+        }
         if let (Some(id), Some(kind)) = (&id, raw_question.get("type").and_then(Value::as_str)) {
             diagnostics.extend(catalogue::validate(kind, id, &raw_question));
         }
@@ -921,6 +948,9 @@ fn document_from_stored(
 
     let pages = map_pages(content, &mut diagnostics);
     let mut stored_settings = stored.settings.clone();
+    let translations =
+        behavior::stored_translations(&mut stored_settings, content, &mut diagnostics);
+    behavior::remove_installation_state(&mut stored_settings);
     let default_locale = if let Some(object) = stored_settings.as_object_mut() {
         let locale = optional_stored_string(
             object,
@@ -964,16 +994,17 @@ fn document_from_stored(
                 stored.version_major, stored.version_minor, stored.version_patch
             ),
             default_locale,
+            consent: content.get("consent").cloned(),
         },
         assets: BTreeMap::new(),
-        variables: BTreeMap::new(),
+        variables,
         questions,
         structure: QDefStructure { pages },
-        flow: Vec::new(),
+        flow,
         rules: Vec::new(),
         settings,
-        translations: BTreeMap::new(),
-        extensions: BTreeMap::new(),
+        translations,
+        extensions,
     })
 }
 
@@ -1009,18 +1040,18 @@ fn map_pages(
         };
         diagnose_unknown_keys(
             object,
-            &["id", "name", "questions", "blocks"],
+            &[
+                "id",
+                "name",
+                "questions",
+                "blocks",
+                "layout",
+                "conditions",
+                "settings",
+            ],
             &path,
             diagnostics,
         );
-        if object.get("questions").is_some_and(value_is_non_empty) {
-            diagnostics.push(error(
-                "QDEF_STORED_PAGE_SHAPE_UNSUPPORTED",
-                format!("{path}/questions"),
-                "Direct page question references are outside the minimal QDef shape.",
-                Some("Place ordered question ids in a stable standard block."),
-            ));
-        }
         let Some(id) = required_string(object, "id", &path, diagnostics) else {
             continue;
         };
@@ -1060,7 +1091,19 @@ fn map_pages(
             };
             diagnose_unknown_keys(
                 block,
-                &["id", "pageId", "name", "type", "questions"],
+                &[
+                    "id",
+                    "pageId",
+                    "name",
+                    "type",
+                    "questions",
+                    "layout",
+                    "randomization",
+                    "loop",
+                    "conditions",
+                    "condition",
+                    "adaptive",
+                ],
                 &block_path,
                 diagnostics,
             );
@@ -1099,7 +1142,9 @@ fn map_pages(
                     "standard".to_owned()
                 }
             };
-            if kind != "standard" {
+            if !["standard", "randomized", "conditional", "loop", "adaptive"]
+                .contains(&kind.as_str())
+            {
                 diagnostics.push(error(
                     "QDEF_BLOCK_TYPE_UNSUPPORTED",
                     format!("{block_path}/type"),
@@ -1145,9 +1190,29 @@ fn map_pages(
                 ),
                 kind,
                 question_ids,
+                behavior: behavior::select_fields(
+                    block,
+                    &[
+                        "layout",
+                        "randomization",
+                        "loop",
+                        "conditions",
+                        "condition",
+                        "adaptive",
+                    ],
+                ),
             });
         }
-        result.push(QDefPage { id, name, blocks });
+        let mut behavior = behavior::select_fields(object, &["layout", "conditions", "settings"]);
+        if let Some(references) = object.get("questions").filter(|v| value_is_non_empty(v)) {
+            behavior.insert("questionIds".into(), references.clone());
+        }
+        result.push(QDefPage {
+            id,
+            name,
+            blocks,
+            behavior,
+        });
     }
 
     result
@@ -1201,7 +1266,8 @@ fn semantic_version(source: &str) -> Option<[i32; 3]> {
 }
 
 fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
-    let mut diagnostics = Vec::new();
+    let mut diagnostics =
+        behavior::validate(&serde_json::to_value(document).expect("QDef is JSON"));
     if document
         .settings
         .validity_policy
@@ -1256,11 +1322,7 @@ fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
     }
     for (field, nonempty) in [
         ("assets", !document.assets.is_empty()),
-        ("variables", !document.variables.is_empty()),
-        ("flow", !document.flow.is_empty()),
         ("rules", !document.rules.is_empty()),
-        ("translations", !document.translations.is_empty()),
-        ("extensions", !document.extensions.is_empty()),
     ] {
         if nonempty {
             diagnostics.push(error(
@@ -1304,7 +1366,9 @@ fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
                     Some("Give every block a stable, unique id."),
                 ));
             }
-            if block.kind != "standard" {
+            if !["standard", "randomized", "conditional", "loop", "adaptive"]
+                .contains(&block.kind.as_str())
+            {
                 diagnostics.push(error(
                     "QDEF_BLOCK_TYPE_UNSUPPORTED",
                     format!("/structure/pages/{page_index}/blocks/{block_index}/type"),
@@ -1517,21 +1581,6 @@ fn diagnose_unknown_keys(
     }
 }
 
-fn diagnose_non_empty_capability(
-    object: &Map<String, Value>,
-    field: &str,
-    diagnostics: &mut Vec<DefinitionDiagnostic>,
-) {
-    if object.get(field).is_some_and(value_is_non_empty) {
-        diagnostics.push(error(
-            "QDEF_STORED_CAPABILITY_UNSUPPORTED",
-            format!("/content/{field}"),
-            format!("Stored '{field}' behavior is outside the minimal text-only QDef shape."),
-            Some("Wait for the corresponding QDef capability ticket; the behavior was not discarded."),
-        ));
-    }
-}
-
 fn value_is_non_empty(value: &Value) -> bool {
     match value {
         Value::Null => false,
@@ -1541,4 +1590,47 @@ fn value_is_non_empty(value: &Value) -> bool {
         Value::Bool(value) => *value,
         Value::Number(_) => true,
     }
+}
+
+/// Native publication and participant entry share the Definition boundary's
+/// execution-capability guard even when a draft was authored outside QDef.
+pub(crate) fn require_execution_capabilities(content: &Value) -> Result<(), ApiError> {
+    let mut diagnostics = behavior::execution_diagnostics(content);
+    diagnostics.extend(source_bindings::execution_diagnostics(content));
+    if has_errors(&diagnostics) {
+        return Err(ApiError::Validation(
+            serde_json::to_string(&diagnostics).map_err(|e| ApiError::Internal(e.to_string()))?,
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn require_stored_execution_capabilities(
+    connection: &mut sqlx::PgConnection,
+    questionnaire_id: Uuid,
+) -> Result<(), ApiError> {
+    let content: Value = sqlx::query_scalar(
+        "SELECT content FROM questionnaire_definitions WHERE id=$1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(connection)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+    require_execution_capabilities(&content)
+}
+
+pub(crate) async fn authorize_stored_source_bindings(
+    state: &AppState,
+    connection: &mut sqlx::PgConnection,
+    actor: Uuid,
+    questionnaire_id: Uuid,
+) -> Result<(), ApiError> {
+    let content: Value = sqlx::query_scalar(
+        "SELECT content FROM questionnaire_definitions WHERE id=$1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(&mut *connection)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+    source_bindings::authorize_targets(state, connection, actor, &content).await
 }

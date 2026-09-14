@@ -185,6 +185,7 @@ pub async fn get_questionnaire_by_code(
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
+    crate::questionnaire_definition::require_execution_capabilities(&questionnaire.definition)?;
     Ok(Json(questionnaire))
 }
 
@@ -575,6 +576,16 @@ pub async fn update_questionnaire(
     )
     .await?;
 
+    if body.status.as_deref() == Some("published") {
+        authorize(
+            &mut tx,
+            &state.rbac,
+            user.user_id,
+            Scope::Project(path.id),
+            Permission::QuestionnairePublish,
+        )
+        .await?;
+    }
     // Serialize the generation check with replacement before any snapshot or
     // content write. A stale autosave cannot restore the pre-import projection.
     let current_epoch: i32 = sqlx::query_scalar(
@@ -593,6 +604,15 @@ pub async fn update_questionnaire(
 
     // Handle publish action
     if body.status.as_deref() == Some("published") {
+        crate::questionnaire_definition::require_stored_execution_capabilities(&mut tx, path.qid)
+            .await?;
+        crate::questionnaire_definition::authorize_stored_source_bindings(
+            &state,
+            &mut tx,
+            user.user_id,
+            path.qid,
+        )
+        .await?;
         let q = sqlx::query_as::<_, Questionnaire>(
             r#"
             UPDATE questionnaire_definitions
@@ -756,6 +776,15 @@ pub async fn publish_questionnaire(
     .await?;
 
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
+    crate::questionnaire_definition::require_stored_execution_capabilities(&mut tx, path.qid)
+        .await?;
+    crate::questionnaire_definition::authorize_stored_source_bindings(
+        &state,
+        &mut tx,
+        user.user_id,
+        path.qid,
+    )
+    .await?;
 
     let questionnaire = sqlx::query_as::<_, Questionnaire>(
         r#"

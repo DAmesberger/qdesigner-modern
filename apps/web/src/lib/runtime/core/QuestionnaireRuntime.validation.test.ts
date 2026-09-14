@@ -49,3 +49,56 @@ describe('QuestionnaireRuntime rejects JavaScript hooks (ADR 0039)', () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 });
+
+it('rejects unknown required extensions before presenting or recording answers', () => {
+  const questionnaire = fixture('');
+  questionnaire.extensions = {
+    'org.example.unsupported': { required: true, data: {} },
+  };
+  const present = vi.fn();
+  const onComplete = vi.fn();
+  expect(
+    () =>
+      new QuestionnaireRuntime({
+        canvas: document.createElement('canvas'),
+        questionnaire,
+        formHost: { present, clear: vi.fn(), showValidationError: vi.fn() },
+        onComplete,
+      })
+  ).toThrow(/QDEF_REQUIRED_EXTENSION.*org.example.unsupported/);
+  expect(present).not.toHaveBeenCalled();
+  expect(onComplete).not.toHaveBeenCalled();
+});
+
+it('rejects an unresolved cohort binding before participant presentation', () => {
+  const questionnaire = fixture('');
+  questionnaire.questions = [
+    {
+      id: 'feedback',
+      type: 'statistical-feedback',
+      order: 0,
+      required: false,
+      display: {
+        title: 'Cohort',
+        chartType: 'bar',
+        sourceMode: 'cohort',
+        dataSource: {
+          source: 'variable',
+          key: 'score',
+          questionnaireId: '',
+          questionnaireBinding: 'reference-cohort',
+        },
+      },
+    },
+  ];
+  const present = vi.fn();
+  expect(
+    () =>
+      new QuestionnaireRuntime({
+        canvas: document.createElement('canvas'),
+        questionnaire,
+        formHost: { present, clear: vi.fn(), showValidationError: vi.fn() },
+      })
+  ).toThrow(/QDEF_SOURCE_BINDING_REQUIRED.*reference-cohort/);
+  expect(present).not.toHaveBeenCalled();
+});

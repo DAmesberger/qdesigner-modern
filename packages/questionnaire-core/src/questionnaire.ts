@@ -66,6 +66,8 @@ export interface Questionnaire {
   flow: FlowControl[];
   settings: QuestionnaireSettings;
   metadata?: Record<string, unknown>;
+  /** Namespaced portable data; required extensions need installed execution support. */
+  extensions?: Record<string, { required: boolean; data: unknown }>;
   /**
    * Informed-consent chrome shown before the study starts when
    * {@link QuestionnaireSettings.requireConsent} is enabled (F-44). Top-level
@@ -1316,6 +1318,9 @@ export interface StatisticalFeedbackConfig extends BaseDisplayConfig {
   metric?: 'count' | 'mean' | 'median' | 'std_dev' | 'p90' | 'p95' | 'p99' | 'z_score';
   dataSource: {
     questionnaireId?: string;
+    questionnaireBinding?: string;
+    participantBinding?: string;
+    comparisonParticipantBinding?: string;
     source?: 'variable' | 'response';
     key?: string;
     currentVariable?: string;

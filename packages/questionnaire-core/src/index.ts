@@ -8,3 +8,5 @@ export {
   getPortableModuleTypes,
   type PortableModuleDefinition,
 } from './moduleCatalogue';
+
+export { assertExecutableDefinition } from './executionPolicy';

@@ -126,11 +126,37 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                 inspect(child, &format!("{path}/{index}"), diagnostics);
             }
         }
+        Value::String(text) if signed_url(text) => diagnostics.push(error(
+            "QDEF_INSTALLATION_STATE",
+            path,
+            "Signed URLs contain installation credentials and cannot be transferred in QDef.",
+            Some("Use a portable asset reference or a public URL without signed credentials."),
+        )),
         Value::String(text) if text.contains('<') && !passive_html(text) => {
             reject(path, diagnostics)
         }
         _ => {}
     }
+}
+
+fn signed_url(text: &str) -> bool {
+    // Also covers URLs embedded in participant markup. Query names are
+    // case-insensitive here because cloud providers use several spellings.
+    let lower = text.to_ascii_lowercase();
+    (lower.contains("https://") || lower.contains("http://"))
+        && [
+            "x-amz-signature=",
+            "x-goog-signature=",
+            "awsaccesskeyid=",
+            "?signature=",
+            "&signature=",
+            "&amp;signature=",
+            "?sig=",
+            "&sig=",
+            "&amp;sig=",
+        ]
+        .iter()
+        .any(|key| lower.contains(key))
 }
 
 fn reject(path: &str, diagnostics: &mut Vec<DefinitionDiagnostic>) {

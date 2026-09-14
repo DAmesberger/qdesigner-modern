@@ -45,6 +45,10 @@ export interface CustomNormConfig {
 
 export interface StatisticalFeedbackDataSourceConfig {
   questionnaireId: string;
+  /** Portable names whose targets are selected locally after import. */
+  questionnaireBinding?: string;
+  participantBinding?: string;
+  comparisonParticipantBinding?: string;
   source: AggregateSourceType;
   key: string;
   currentVariable: string;

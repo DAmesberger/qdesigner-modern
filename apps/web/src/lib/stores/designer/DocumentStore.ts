@@ -180,6 +180,13 @@ export class DocumentStore {
       normalized.consent = deepClone(source.consent);
     }
 
+    if (source?.extensions) {
+      normalized.extensions = deepClone(source.extensions);
+    }
+    if (source?.metadata) {
+      normalized.metadata = deepClone(source.metadata);
+    }
+
     normalized.variables = Array.isArray(source?.variables) ? deepClone(source.variables) : [];
     normalized.questions = Array.isArray(source?.questions) ? deepClone(source.questions) : [];
     normalized.flow = Array.isArray(source?.flow) ? deepClone(source.flow) : [];
@@ -651,7 +658,7 @@ export class DocumentStore {
 
       let blocks = Array.isArray(sourcePage.blocks) ? deepClone(sourcePage.blocks) : [];
 
-      if (blocks.length === 0) {
+      if (!Array.isArray(sourcePage.blocks) && !Array.isArray(sourcePage.questions)) {
         const pageQuestions = Array.isArray(sourcePage.questions)
           ? sourcePage.questions.filter((id: string) => questionIdSet.has(id))
           : [];
@@ -680,6 +687,7 @@ export class DocumentStore {
         conditions: rawBlock.conditions,
         condition: rawBlock.condition,
         adaptive: rawBlock.adaptive,
+        layout: rawBlock.layout,
       }));
 
       return {
@@ -689,6 +697,7 @@ export class DocumentStore {
         blocks: normalizedBlocks,
         layout: sourcePage.layout,
         conditions: sourcePage.conditions,
+        settings: sourcePage.settings,
       };
     });
   }
@@ -713,7 +722,7 @@ export class DocumentStore {
 
     questionnaire.pages.forEach((page) => {
       if (!page.id) page.id = generateId('page');
-      if (!Array.isArray(page.blocks) || page.blocks.length === 0) {
+      if (!Array.isArray(page.blocks)) {
         page.blocks = [
           {
             id: generateId('block'),
